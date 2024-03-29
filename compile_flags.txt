@@ -1,0 +1,14 @@
+--target=x86_64-pc-windows-gnu
+-std=c++2a
+-xc++
+-isystem/usr/lib/gcc/x86_64-w64-mingw32/10-win32/include/c++/
+-isystem/usr/lib/gcc/x86_64-w64-mingw32/10-win32/include/c++/x86_64-w64-mingw32/
+-I.
+-I..
+-Ivpr_memory
+-Wall
+-Wextra
+-Werror
+-Wshadow
+-Wpedantic
+-Wconversion
