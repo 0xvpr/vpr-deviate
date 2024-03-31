@@ -39,13 +39,17 @@
 
 
 #if        !defined(__cplusplus)
-#define             mov_rax ( (((uint16_t)(0x1234)) & 0xFF) == 0x34 ? 0xB848 : 0x48B8)
-#define             jmp_rax ( (((uint16_t)(0x1234)) & 0xFF) == 0x34 ? 0xE0FF : 0xFFE0)
-#define             abs_jmp_rax_size ( ((sizeof(uint16_t)) + sizeof(uint64_t) + sizeof(uint16_t)) )
+#define             rel_jmp      ( ((uint8_t)0xE9) )
+#define             rel_jmp_size ( ((sizeof(uint32_t)+1)) )
+#define             mov_rax      ( (((uint16_t)(0x1234)) & 0xFF) == 0x34 ? 0xB848 : 0x48B8 )
+#define             jmp_rax      ( (((uint16_t)(0x1234)) & 0xFF) == 0x34 ? 0xE0FF : 0xFFE0 )
+#define             jmp_rax_size ( (sizeof(uint16_t)) )
 #else   // defined(__cplusplus)
-constexpr uint16_t  mov_rax = ((uint16_t)0x1234 & 0xFF) == 0x34 ? 0xB848 : 0x48B8;
-constexpr uint16_t  jmp_rax = ((uint16_t)0x1234 & 0xFF) == 0x34 ? 0xE0FF : 0xFFE0;
-constexpr size_t    abs_jmp_rax_size = sizeof(mov_rax) + sizeof(uint64_t) + sizeof(jmp_rax);
+constexpr uint8_t   rel_jmp      = (uint8_t)0xE9;
+constexpr uint32_t  rel_jmp_size = ((sizeof(uint32_t)+1));
+constexpr uint16_t  mov_rax      = (((uint16_t)0x1234) & 0xFF) == 0x34 ? 0xB848 : 0x48B8;
+constexpr uint16_t  jmp_rax      = (((uint16_t)0x1234) & 0xFF) == 0x34 ? 0xE0FF : 0xFFE0;
+constexpr size_t    jmp_rax_size = (sizeof(uint16_t));
 #endif  // defined(__cplusplus)
 
 
@@ -56,45 +60,101 @@ constexpr size_t    abs_jmp_rax_size = sizeof(mov_rax) + sizeof(uint64_t) + size
 
 
 
-typedef struct __attribute__((packed)) asm_block_32 {
-    uint16_t    mov_eax;
-    uint32_t    address;
-    uint16_t    jmp_eax;
-} asm_block_32_t, *asm_block_32_ptr;
+typedef struct __attribute__((packed)) eax_jmp_data {
+    uint16_t    mov_eax     : 16;
+    uint32_t    address     : 32;
+    uint16_t    jmp_eax     : 16;
+} eax_jmp_data_t, *eax_jmp_data_ptr;
 
-typedef struct __attribute__((packed)) asm_block_64 {
-    uint16_t    mov_rax;
-    uint64_t    address;
-    uint16_t    jmp_rax;
-} asm_block_64_t, *asm_block_64_ptr;
+typedef struct __attribute__((packed)) rax_jmp_data {
+    uint16_t    mov_rax     : 16;
+    uint64_t    address     : 64;
+    uint16_t    jmp_rax     : 16;
+} rax_jmp_data_t, *rax_jmp_data_ptr;
+
+typedef struct __attribute__((packed)) gateway_data {
+    uint8_t     rel_jmp     :  8;
+    int32_t     address     : 32;
+} gateway_data_t, *gateway_data_ptr;
 
 
+__forceinline
+void set_rax_jmp_data(rax_jmp_data_ptr jmp_data, uint64_t address) {
+    jmp_data->mov_rax = mov_rax;
+    jmp_data->address = address+rel_jmp_size; // address after detour patch
+    jmp_data->jmp_rax = jmp_rax;
+}
+
+__forceinline
+void set_gateway_data(gateway_data_ptr gateway_data, int32_t address) {
+    gateway_data->rel_jmp = rel_jmp;
+    gateway_data->address = address; // address after detour patch
+}
 
 /**
  * TODO
 **/
 __forceinline
 bool vpr_deviate_detour(
-    uintptr_t        target_addr,
-    uintptr_t        detour_addr,
-    size_t           detour_size
-);
+    uintptr_t       target_addr,
+    uintptr_t       detour_addr,
+    uintptr_t       original_bytes,
+    size_t          original_bytes_size
+)
+{
+    if (original_bytes_size < rel_jmp_size) {
+        return false;
+    }
+
+    memcpy((void *)original_bytes, (void *)target_addr, original_bytes_size);
+
+    DWORD dwProtect;
+    VirtualProtect((void *)target_addr, original_bytes_size, PAGE_EXECUTE_READWRITE, &dwProtect);
+
+    int32_t relative_addr = (int32_t)(detour_addr - target_addr - rel_jmp_size);
+    gateway_data_ptr gateway_data = (gateway_data_ptr)(target_addr);
+    set_gateway_data(gateway_data, relative_addr);
+
+    VirtualProtect((void *)target_addr, original_bytes_size, dwProtect, &dwProtect);
+
+    return true;
+}
 
 /**
  * Hooks into a function and detours the target function to another function, then jumps back.
  *
- * @param:  LPVOID src
- * @param:  LPVOID dst
- * @param:  size_t size
+ * @param:  uintptr_t target_addr
+ * @param:  uintptr_t hook_addr
+ * @param:  size_t hook_size
  *
- * @return: uintptr_t
+ * @return: return address (needs to be freed via VirtualFree by the caller).
 **/
 __forceinline
 uintptr_t vpr_deviate_tramp_hook(
-    uintptr_t        target_addr,
-    uintptr_t        hook_addr,
-    size_t           hook_size
-);
+    uintptr_t       target_addr,
+    uintptr_t       hook_addr,
+    size_t          hook_size,
+    uintptr_t       original_bytes,
+    size_t          original_bytes_size
+)
+{
+    if (hook_size < rel_jmp_size) {
+        return 0;
+    }
+
+    uintptr_t gateway = (uintptr_t)VirtualAlloc(NULL, hook_size + rel_jmp_size, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    memcpy((void *)gateway, (void *)target_addr, hook_size);
+
+    int32_t relative_addr = (int32_t)(hook_addr - target_addr - rel_jmp_size);
+    gateway_data_ptr gateway_data = (gateway_data_ptr)(gateway + hook_size);
+    set_gateway_data(gateway_data, relative_addr);
+
+    if (vpr_deviate_detour(target_addr, hook_addr, original_bytes, original_bytes_size)) {
+        return gateway;
+    }
+
+    return 0;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 //                                C++ API
@@ -105,110 +165,83 @@ uintptr_t vpr_deviate_tramp_hook(
 namespace vpr {
 namespace deviate {
 
-class hook {
-    /*typedef  VirtualProtect_t;*/
-public:
-    hook() = delete;
-    hook(const hook& other) = delete;
-    hook& operator = (const hook& other) = delete;
-
-    static inline hook make_hook(auto original_addr, auto hook_addr) {
-        return hook(original_addr, hook_addr);
+/**
+ * TODO
+**/
+__forceinline
+bool detour(
+    auto&&          target_func,
+    auto&&          detour_func,
+    auto&&          original_bytes = nullptr,
+    size_t          original_bytes_size = 5
+)
+{
+    if (original_bytes_size < rel_jmp_size) {
+        return false;
     }
 
-    void detour() {
-        DWORD dwProtect = 0;
-        VirtualProtect((void *)original_addr_, abs_jmp_rax_size, PAGE_EXECUTE_READWRITE, &dwProtect);
-        hook_block_->mov_rax = mov_rax;
-        hook_block_->address = hook_addr_;
-        hook_block_->jmp_rax = jmp_rax;
-        VirtualProtect((void *)original_addr_, abs_jmp_rax_size, dwProtect, &dwProtect);
-
-        is_hooked_ = true;
+    if (original_bytes) {
+        memcpy((void *)original_bytes, (void *)target_func, original_bytes_size);
     }
 
-    void detour(auto&& funcptr) {
-        if (!funcptr) return;
+    DWORD dwProtect;
+    VirtualProtect((void *)target_func, original_bytes_size, PAGE_EXECUTE_READWRITE, &dwProtect);
 
-        DWORD dwProtect = 0;
-        VirtualProtect((void *)original_addr_, abs_jmp_rax_size, PAGE_EXECUTE_READWRITE, &dwProtect);
-        hook_block_->mov_rax = mov_rax;
-        hook_block_->address = (uint64_t)(+funcptr);
-        hook_block_->jmp_rax = jmp_rax;
-        VirtualProtect((void *)original_addr_, abs_jmp_rax_size, dwProtect, &dwProtect);
+    int32_t relative_func = (int32_t)((uintptr_t)+detour_func - (uintptr_t)target_func - rel_jmp_size);
+    gateway_data_ptr gateway_data = (gateway_data_ptr)(target_func);
+    set_gateway_data(gateway_data, relative_func);
 
-        is_hooked_ = true;
+    VirtualProtect((void *)target_func, original_bytes_size, dwProtect, &dwProtect);
+
+    return true;
+}
+
+/**
+ * Hooks into a function and detours the target function to another function, then jumps back.
+ *
+ * @param:  uintptr_t target_addr
+ * @param:  uintptr_t hook_addr
+ * @param:  size_t hook_size
+ *
+ * @return: return address (needs to be freed via VirtualFree by the caller).
+**/
+__forceinline
+uintptr_t trampoline(
+    auto&&          target_func,
+    auto&&          hook_func,
+    size_t          hook_size,
+    auto&&          original_bytes,
+    size_t          original_bytes_size
+)
+{
+    if (hook_size < rel_jmp_size) {
+        return 0;
     }
 
-    void restore() {
-        if (!is_hooked_) return;
+    uintptr_t gateway = (uintptr_t)VirtualAlloc(NULL, hook_size + rel_jmp_size, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    memcpy((void *)gateway, (void *)target_func, hook_size);
 
-        DWORD dwProtect = 0;
-        VirtualProtect((LPVOID)original_addr_, abs_jmp_rax_size, PAGE_EXECUTE_READWRITE, &dwProtect);
-        *(asm_block_64_ptr)original_addr_ = restore_block_;
-        VirtualProtect((LPVOID)original_addr_, abs_jmp_rax_size, dwProtect, &dwProtect);
+    int32_t relative_func = (int32_t)((uintptr_t)+hook_func - (uintptr_t)target_func - rel_jmp_size);
+    gateway_data_ptr gateway_data = (gateway_data_ptr)(gateway + hook_size);
+    set_gateway_data(gateway_data, relative_func);
 
-        hook_addr_ = 0;
-        is_hooked_ = false;
+    if (detour(target_func, hook_func, original_bytes, original_bytes_size)) {
+        return gateway;
     }
 
-private:
-    explicit constexpr hook(auto&& original_addr, auto&& hook_addr) //, auto&& fVirtualProtect = VirtualProtect)
-        : original_addr_((uintptr_t)original_addr)
-        , hook_addr_((uintptr_t)(+hook_addr))
-        , is_hooked_(false)
-        , restore_block_( *((asm_block_64_ptr)(original_addr)) )
-        , hook_block_( (asm_block_64_ptr)(original_addr) )
-    {
-    }
+    return 0;
+}
 
-    ////////////////////////////////////////////////////////////////////////////
-
-    uintptr_t               original_addr_;
-    uintptr_t                   hook_addr_;
-    bool                        is_hooked_;
-    const asm_block_64      restore_block_;
-    asm_block_64_ptr           hook_block_;
-};
-
-class model {
-public:
-    model() = delete;
-    model(const model&) = delete;
-    model& operator = (const model&) = delete;
-
-    //   Initialization and Cleanup
-    //       InitializeLibrary: Prepares any necessary internal structures, checks for necessary permissions, etc.
-    //       CleanupLibrary: Frees resources, closes handles, etc., before the library is unloaded.
-    //
-    //   Process Selection and Management
-    //       AttachToProcess: Attaches to a target process using its PID (Process ID) or name, to perform memory operations.
-    //       DetachFromProcess: Detaches from the currently attached process.
-    //
-    //   Memory Reading and Writing
-    //       ReadMemory: Reads memory from the target process into a local buffer.
-    //       WriteMemory: Writes data from a local buffer to a specific location in the target process's memory.
-    //
-    //   Memory Allocation and Deallocation
-    //       AllocateMemory: Allocates memory within the virtual address space of the target process.
-    //       FreeMemory: Frees previously allocated memory within the target process.
-    //
-    //   Memory Protection
-    //       ChangeMemoryProtection: Changes the protection on a region of memory in the target process, e.g., to make a read-only region writable.
-    //
-    //   Memory Searching and Pattern Matching
-    //       FindPattern: Searches the process's memory for a specific pattern or signature, which can be useful for finding offsets or data structures dynamically.
-    //
-    //   Debugging and Information
-    //       GetMemoryInfo: Retrieves information about a specific region of memory in the target process, such as its protection status, type, and size.
-    //       LogError: Provides logging for errors encountered by the library functions.
-    //
-    //   Module and Address Resolution
-    //       GetModuleBaseAddress: Retrieves the base address of a given module loaded within the target process, useful for calculating offsets.
-    //       ResolveAddress: Resolves an address based on a given module and offset, simplifying the process of finding specific functions or data structures.
-    //   Hooking and Detouring struct/class
-private:
-};
+__forceinline
+void restore( auto&& target_func,
+              auto&& original_bytes,
+              size_t original_bytes_size )
+{
+    DWORD protect;
+    VirtualProtect((void *)target_func, original_bytes_size, PAGE_READWRITE, &protect);
+    memcpy((void *)target_func, original_bytes, original_bytes_size);
+    VirtualProtect((void *)target_func, original_bytes_size, protect, &protect);
+}
 
 } // namespace memory
 } // namespace vpr
