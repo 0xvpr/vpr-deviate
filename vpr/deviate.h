@@ -16,14 +16,10 @@
 
 
 
-#include <memoryapi.h>
 #ifndef    VC_EXTRA_LEAN
 #define    VC_EXTRA_LEAN
 #endif  // VC_EXTRA_LEAN
-#include   <winternl.h>
 #include   <windows.h>
-#include   <winnt.h>
-#include   <intrin.h>
 
 
 
@@ -32,7 +28,6 @@
 #include   <stdint.h>
 #include   <string.h>
 #else   // defined(__cplusplus)
-#include   <memory>
 #include   <cstring>
 #include   <cstdint>
 #endif  // defined(__cplusplus)
@@ -48,8 +43,8 @@
 #else   // defined(__cplusplus)
 constexpr uint8_t   rel_jmp      = (uint8_t)0xE9;
 constexpr uint32_t  rel_jmp_size = ((sizeof(uint32_t)+1));
-constexpr uint16_t  mov_rax      = (((uint16_t)0x1234) & 0xFF) == 0x34 ? 0xB848 : 0x48B8;
-constexpr uint16_t  jmp_rax      = (((uint16_t)0x1234) & 0xFF) == 0x34 ? 0xE0FF : 0xFFE0;
+constexpr uint16_t  mov_rax      = (((uint16_t)(0x1234)) & 0xFF) == 0x34 ? 0xB848 : 0x48B8;
+constexpr uint16_t  jmp_rax      = (((uint16_t)(0x1234)) & 0xFF) == 0x34 ? 0xE0FF : 0xFFE0;
 constexpr size_t    jmp_rax_size = (sizeof(uint16_t));
 #endif  // defined(__cplusplus)
 
@@ -96,15 +91,20 @@ void set_gateway_data(gateway_data_ptr gateway_data, int32_t address) {
 
 
 /**
- * TODO
+ * Resolve dynamic address using address and pointer array.
+ *
+ * @param:  uintptr_t       address
+ * @param:  const uint16_t* offsets
+ * @param:  const size_t    n_memb
+ *
+ * @return: uintptr_t       resolved_address
 **/
 __forceinline
-uintptr_t vpr_deviate_resolve_dynamic_address(
-    uintptr_t       address,
-    uint16_t*       offsets,
-    size_t          size
-) { 
-    for (size_t i = 0; i < size; i++) {
+uintptr_t vpr_deviate_resolve_dynamic_address( uintptr_t       address,
+                                               const uint16_t* offsets,
+                                               const size_t    n_memb )
+{ 
+    for (size_t i = 0; i < n_memb; i++) {
         if (!address) {
             return 0;
         }
@@ -112,7 +112,7 @@ uintptr_t vpr_deviate_resolve_dynamic_address(
         address = *(uintptr_t *)address;
         address += offsets[i];
 
-        if (!address || *(uintptr_t *)address == 0) {
+        if (*(uintptr_t *)address == 0) {
             return 0;
         }
     }
@@ -121,22 +121,27 @@ uintptr_t vpr_deviate_resolve_dynamic_address(
 }
 
 /**
- * TODO
+ * Replace executable of destination from the source.
+ *
+ * @param:  void*           destination,
+ * @param:  const void*     source,
+ * @param:  const size_t    size
+ *
+ * @return: bool            success
 **/
 __forceinline
-bool vpr_deviate_patch(
-    uintptr_t       destination,
-    uintptr_t       source,
-    size_t          size
-) {
+bool vpr_deviate_patch( void*        destination,
+                        const void*  source,
+                        const size_t size )
+{
     DWORD protect;
-    if (!VirtualProtect((void *)destination, size, PAGE_EXECUTE_READWRITE, &protect)) {
+    if (!VirtualProtect(destination, size, PAGE_EXECUTE_READWRITE, &protect)) {
         return false;
     }
 
-    memcpy((void *)destination, (void *)source, size);
+    memcpy(destination, source, size);
 
-    if (!VirtualProtect((void *)destination, size, protect, &protect)) {
+    if (!VirtualProtect(destination, size, protect, &protect)) {
         return false;
     }
 
@@ -146,36 +151,33 @@ bool vpr_deviate_patch(
 /**
  * Detours the target to another function.
  *
- * @param: uintptr_t  target_func,
- * @param: uintptr_t  detour_func,
- * @param: uintptr_t  original_bytes,
- * @param: size_t     original_bytes_size
+ * @param: void*            target_func,
+ * @param: const void*      detour_func,
+ * @param: void*            original_bytes,
+ * @param: const size_t     original_bytes_size
  *
- * @return: success
+ * @return: bool            success
 **/
 __forceinline
-bool vpr_deviate_detour(
-    uintptr_t       target_func,
-    uintptr_t       detour_func,
-    uintptr_t       original_bytes,
-    size_t          original_bytes_size
-) {
+bool vpr_deviate_detour( void*        target_func,
+                         const void*  detour_func,
+                         void*        original_bytes,
+                         const size_t original_bytes_size )
+{
     if (original_bytes) {
-        memcpy((void *)original_bytes, (void *)target_func, original_bytes_size);
+        memcpy(original_bytes, target_func, original_bytes_size);
     }
 
     DWORD protect;
-    uint64_t relative_func = detour_func - target_func - rel_jmp_size;
+    uint64_t relative_func = (uintptr_t)detour_func - (uintptr_t)target_func - rel_jmp_size;
     if ((relative_func & 0xFFFFFFFF00000000)) {
-        VirtualProtect((void *)target_func, sizeof(rax_jmp_data), PAGE_EXECUTE_READWRITE, &protect);
-        rax_jmp_data_ptr jmp_data = (rax_jmp_data_ptr)(target_func);
-        set_rax_jmp_data(jmp_data, (uintptr_t)detour_func);
-        VirtualProtect((void *)target_func, sizeof(rax_jmp_data), protect, &protect);
+        VirtualProtect(target_func, sizeof(rax_jmp_data), PAGE_EXECUTE_READWRITE, &protect);
+        set_rax_jmp_data((rax_jmp_data_ptr)target_func, (uintptr_t)detour_func);
+        VirtualProtect(target_func, sizeof(rax_jmp_data), protect, &protect);
     } else {
-        VirtualProtect((void *)target_func, sizeof(rel_jmp_size), PAGE_EXECUTE_READWRITE, &protect);
-        gateway_data_ptr gateway_data = (gateway_data_ptr)(target_func);
-        set_gateway_data(gateway_data, (int32_t)relative_func);
-        VirtualProtect((void *)target_func, sizeof(rel_jmp_size), protect, &protect);
+        VirtualProtect(target_func, sizeof(rel_jmp_size), PAGE_EXECUTE_READWRITE, &protect);
+        set_gateway_data((gateway_data_ptr)target_func, (int32_t)relative_func);
+        VirtualProtect(target_func, sizeof(rel_jmp_size), protect, &protect);
     }
 
     return true;
@@ -184,38 +186,40 @@ bool vpr_deviate_detour(
 /**
  * Detours the target to another function then returns a gateway address to the original target.
  *
- * @param: uintptr_t  target_func,
- * @param: uintptr_t  detour_func,
- * @param: size_t     detour_size,
- * @param: uintptr_t  original_bytes,
- * @param: size_t     original_bytes_size
+ * @param:  void*           target_func,
+ * @param:  const void*     detour_func,
+ * @param:  size_t          detour_size,
+ * @param:  void*           original_bytes,
+ * @param:  size_t          original_bytes_size
  *
- * @return: uintptr_t gateway_address (needs to be freed via VirtualFree by the caller when non-zero).
+ * @return: void*           gateway_address (needs to be freed via VirtualFree by the caller when non-zero)
 **/
 __forceinline
-uintptr_t vpr_deviate_tramp_hook(
-    uintptr_t       target_func,
-    uintptr_t       detour_func,
-    size_t          detour_size,
-    uintptr_t       original_bytes,
-    size_t          original_bytes_size
-) {
+void* vpr_deviate_trampoline( void*       target_func,
+                              const void* detour_func,
+                              size_t      detour_size,
+                              void*       original_bytes,
+                              size_t      original_bytes_size )
+{
     if (detour_size < rel_jmp_size) {
-        return 0;
+        return NULL;
     }
 
-    uintptr_t gateway = (uintptr_t)VirtualAlloc(NULL, detour_size + rel_jmp_size, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    void* gateway;
+    if (!(gateway = VirtualAlloc(NULL, detour_size + rel_jmp_size, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE))) {
+        return NULL;
+    }
     memcpy((void *)gateway, (void *)target_func, detour_size);
 
-    int32_t relative_addr = (int32_t)(detour_func - target_func - rel_jmp_size);
-    gateway_data_ptr gateway_data = (gateway_data_ptr)(gateway + detour_size);
+    int32_t relative_addr = (int32_t)((uintptr_t)detour_func - (uintptr_t)target_func - rel_jmp_size);
+    gateway_data_ptr gateway_data = (gateway_data_ptr)((uintptr_t)gateway + detour_size);
     set_gateway_data(gateway_data, relative_addr);
 
     if (vpr_deviate_detour(target_func, detour_func, original_bytes, original_bytes_size)) {
         return gateway;
     }
 
-    return 0;
+    return NULL;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -228,110 +232,89 @@ namespace vpr {
 namespace deviate {
 
 /**
- * Detours the target to another function.
+ * Resolve dynamic address using address and pointer array.
  *
- * @param: auto&&     target_func,
- * @param: auto&&     detour_func,
- * @param: auto&&     original_bytes,
- * @param: size_t     original_bytes_size
+ * @param:  uintptr_t       address
+ * @param:  const uint16_t* offsets
+ * @param:  const size_t    n_memb
  *
- * @return: success
+ * @return: uintptr_t       resolved_address
 **/
 __forceinline
-bool detour(
-    auto&&          target_func,
-    auto&&          detour_func,
-    auto&&          original_bytes = nullptr,
-    size_t          original_bytes_size = rel_jmp_size
-) {
-    if (original_bytes) {
-        memcpy((void *)original_bytes, (void *)target_func, original_bytes_size);
-    }
+uintptr_t resolve_dynamic_address( uintptr_t       address,
+                                   const uint16_t* offsets,
+                                   const size_t    n_memb )
+{ 
+    return vpr_deviate_resolve_dynamic_address( address,
+                                                offsets,
+                                                n_memb );
+}
 
-    DWORD protect;
-    uint64_t relative_func = (uintptr_t)+detour_func - (uintptr_t)target_func - rel_jmp_size;
-    if ((relative_func & 0xFFFFFFFF00000000)) {
-        VirtualProtect((void *)target_func, sizeof(rax_jmp_data), PAGE_EXECUTE_READWRITE, &protect);
-        set_rax_jmp_data(reinterpret_cast<rax_jmp_data_ptr>(target_func), (uintptr_t)+detour_func);
-        VirtualProtect((void *)target_func, sizeof(rax_jmp_data), protect, &protect);
-    } else {
-        VirtualProtect((void *)target_func, sizeof(rel_jmp_size), PAGE_EXECUTE_READWRITE, &protect);
-        set_gateway_data(reinterpret_cast<gateway_data_ptr>(target_func), (int32_t)relative_func);
-        VirtualProtect((void *)target_func, sizeof(rel_jmp_size), protect, &protect);
-    }
+/**
+ * Replace executable of destination from the source.
+ *
+ * @param:  auto&&          destination
+ * @param:  auto&&          source
+ * @param:  const size_t    n_bytes
+ *
+ * @return: bool            success
+**/
+__forceinline
+bool patch( auto&&       destination,
+            auto&&       source,
+            const size_t size )
+{
+    return vpr_deviate_patch( (void *)+destination,
+                              (void *)+source,
+                              size );
+}
 
-    return true;
+/**
+ * Detours the target to another function.
+ *
+ * @param:  auto&&          target_func
+ * @param:  auto&&          detour_func
+ * @param:  auto&&          original_bytes
+ * @param:  const size_t    original_bytes_size
+ *
+ * @return: bool            success
+**/
+__forceinline
+bool detour( auto&&       target_func,
+             auto&&       detour_func,
+             auto&&       original_bytes = nullptr,
+             const size_t original_bytes_size = rel_jmp_size )
+{
+    return vpr_deviate_detour( (void *)+target_func,
+                               (const void *)+detour_func,
+                               original_bytes,
+                               original_bytes_size );
 }
 
 /**
  * Detours the target to another function then returns a gateway address to the original target.
  *
- * @param: auto&&     target_func,
- * @param: auto&&     detour_func,
- * @param: size_t     detour_size,
- * @param: auto&&     original_bytes,
- * @param: size_t     original_bytes_size
+ * @param:  auto&&          target_func
+ * @param:  auto&&          detour_func
+ * @param:  size_t          detour_size
+ * @param:  auto&&          original_bytes
+ * @param:  size_t          original_bytes_size
  *
- * @return: uintptr_t gateway_address (needs to be freed via VirtualFree by the caller when non-zero).
+ * @return: void*           gateway_address (needs to be freed via VirtualFree by the caller when non-zero)
 **/
 __forceinline
-uintptr_t trampoline(
-    auto&&          target_func,
-    auto&&          detour_func,
-    size_t          detour_size,
-    auto&&          original_bytes,
-    size_t          original_bytes_size
-) {
-    if (detour_size < rel_jmp_size) {
-        return 0;
-    }
-    uint64_t relative_func = ((uintptr_t)+detour_func - (uintptr_t)target_func - rel_jmp_size);
-    uintptr_t gateway = 0;
+void* trampoline( auto&&       target_func,
+                  auto&&       detour_func,
+                  const size_t detour_size,
+                  auto&&       original_bytes = nullptr,
+                  const size_t original_bytes_size = rel_jmp_size )
+{
+    return vpr_deviate_trampoline( (void *)+target_func,
+                                   (const void *)+detour_func,
+                                   detour_size,
+                                   original_bytes,
+                                   original_bytes_size );
 
-    if ((relative_func & 0xFFFFFFFF00000000)) {
-        gateway = (uintptr_t)VirtualAlloc(NULL, detour_size+sizeof(rax_jmp_data), MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
-        memcpy((void *)gateway, (void *)target_func, detour_size);
-        set_rax_jmp_data(reinterpret_cast<rax_jmp_data_ptr>(gateway + detour_size), (uintptr_t)target_func);
-
-        DWORD protect;
-        VirtualProtect(reinterpret_cast<void *>(gateway), detour_size+rel_jmp_size, PAGE_EXECUTE_READ, &protect);
-    } else {
-        gateway = (uintptr_t)VirtualAlloc(NULL, detour_size+rel_jmp_size, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
-        memcpy((void *)gateway, (void *)target_func, detour_size);
-        set_gateway_data(reinterpret_cast<gateway_data_ptr>(gateway+detour_size), (int32_t)relative_func);
-
-        DWORD protect;
-        VirtualProtect(reinterpret_cast<void *>(gateway), detour_size+rel_jmp_size, PAGE_EXECUTE_READ, &protect);
-    }
-
-    if (detour(target_func, detour_func, original_bytes, original_bytes_size)) {
-        return gateway;
-    }
-
-    return 0;
-}
-
-/**
- * TODO
-**/
-__forceinline
-bool patch(
-    auto&&          destination,
-    auto&&          source,
-    size_t          size
-) {
-    DWORD protect;
-    if (!VirtualProtect((void *)destination, size, PAGE_EXECUTE_READWRITE, &protect)) {
-        return false;
-    }
-
-    memcpy((void *)destination, (void *)source, size);
-
-    if (!VirtualProtect((void *)destination, size, protect, &protect)) {
-        return false;
-    }
-
-    return true;
 }
 
 } // namespace memory

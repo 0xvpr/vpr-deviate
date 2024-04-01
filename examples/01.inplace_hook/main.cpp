@@ -1,5 +1,7 @@
 #include "vpr/deviate.h"
 
+#include <stdio.h>
+
 unsigned char original_bytes[rel_jmp_size];
 
 void foo(int x) {
@@ -23,9 +25,9 @@ void bar(int x) {
 int main() {
     // C API
     foo(5);
-    vpr_deviate_detour( (uintptr_t)foo,
-                        (uintptr_t)bar,
-                        (uintptr_t)original_bytes,
+    vpr_deviate_detour( (void *)foo,
+                        (void *)bar,
+                        (void *)original_bytes,
                         sizeof(original_bytes) );
     // C++ api
     foo(5);
