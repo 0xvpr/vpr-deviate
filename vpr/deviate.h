@@ -16,7 +16,6 @@
 
 
 
-#include <memoryapi.h>
 #ifndef    VC_EXTRA_LEAN
 #define    VC_EXTRA_LEAN
 #endif  // VC_EXTRA_LEAN
@@ -273,6 +272,7 @@ void* vpr_deviate_trampoline( void*       target_func,
     return NULL;
 }
 
+
 ////////////////////////////////////////////////////////////////////////////////
 //                                C++ API
 ////////////////////////////////////////////////////////////////////////////////
@@ -367,6 +367,10 @@ void* trampoline( auto&&       target_func,
                                    original_bytes_size );
 
 }
+
+////////////////////////////////////////////////////////////////////////////////
+//                               Hook Manager
+////////////////////////////////////////////////////////////////////////////////
 
 class [[nodiscard]] interceptor {
 public:
