@@ -29,7 +29,7 @@ int main() {
                         (void *)bar,
                         (void *)original_bytes,
                         sizeof(original_bytes) );
-    // C++ api
+    // C++ API
     foo(5);
     vpr::deviate::detour( foo,
                           [](int x) { printf("%d\n", 5*x); },
@@ -41,6 +41,14 @@ int main() {
     vpr::deviate::patch( foo,
                          original_bytes,
                          sizeof(original_bytes) );
+    foo(5);
+
+    // C++ Interceptor
+    auto interceptor = vpr::deviate::interceptor( foo,
+                                                  []() { puts("interceptor"); } );
+    interceptor.detour();
+    foo(5);
+    interceptor.restore();
     foo(5);
 
     return 0;
