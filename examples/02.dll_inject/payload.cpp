@@ -8,7 +8,6 @@ void bar() {
 }
 
 DWORD WINAPI Main(HINSTANCE instance) {
-
     auto target = (uintptr_t)GetProcAddress(GetModuleHandleA(nullptr), "foo");
     vpr::deviate::detour( target,
                           bar,

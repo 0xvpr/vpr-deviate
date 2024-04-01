@@ -14,7 +14,7 @@ void bar(int x) {
     memcpy(jump_back, original_bytes, sizeof(original_bytes));
 
     rax_jmp_data_ptr jmp_data = (rax_jmp_data_ptr)(jump_back+sizeof(original_bytes));
-    set_rax_jmp_data(jmp_data, (uint64_t)foo);
+    set_rax_jmp_data(jmp_data, (uint64_t)foo+rel_jmp_size);
 
     ((decltype(&foo))jump_back)(x);
     VirtualFree(jump_back, size, MEM_RELEASE | MEM_FREE);

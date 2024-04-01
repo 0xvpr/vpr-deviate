@@ -16,6 +16,7 @@
 
 
 
+#include <memoryapi.h>
 #ifndef    VC_EXTRA_LEAN
 #define    VC_EXTRA_LEAN
 #endif  // VC_EXTRA_LEAN
@@ -82,14 +83,14 @@ typedef struct __attribute__((packed)) gateway_data {
 __forceinline
 void set_rax_jmp_data(rax_jmp_data_ptr jmp_data, uint64_t address) {
     jmp_data->mov_rax = mov_rax;
-    jmp_data->address = address+rel_jmp_size; // address after detour patch
+    jmp_data->address = address;
     jmp_data->jmp_rax = jmp_rax;
 }
 
 __forceinline
 void set_gateway_data(gateway_data_ptr gateway_data, int32_t address) {
     gateway_data->rel_jmp = rel_jmp;
-    gateway_data->address = address; // address after detour patch
+    gateway_data->address = address;
 }
 
 
@@ -143,7 +144,14 @@ bool vpr_deviate_patch(
 }
 
 /**
- * TODO
+ * Detours the target to another function.
+ *
+ * @param: uintptr_t  target_func,
+ * @param: uintptr_t  detour_func,
+ * @param: uintptr_t  original_bytes,
+ * @param: size_t     original_bytes_size
+ *
+ * @return: success
 **/
 __forceinline
 bool vpr_deviate_detour(
@@ -220,7 +228,14 @@ namespace vpr {
 namespace deviate {
 
 /**
- * TODO
+ * Detours the target to another function.
+ *
+ * @param: auto&&     target_func,
+ * @param: auto&&     detour_func,
+ * @param: auto&&     original_bytes,
+ * @param: size_t     original_bytes_size
+ *
+ * @return: success
 **/
 __forceinline
 bool detour(
@@ -237,13 +252,11 @@ bool detour(
     uint64_t relative_func = (uintptr_t)+detour_func - (uintptr_t)target_func - rel_jmp_size;
     if ((relative_func & 0xFFFFFFFF00000000)) {
         VirtualProtect((void *)target_func, sizeof(rax_jmp_data), PAGE_EXECUTE_READWRITE, &protect);
-        rax_jmp_data_ptr jmp_data = (rax_jmp_data_ptr)(target_func);
-        set_rax_jmp_data(jmp_data, (uintptr_t)+detour_func);
+        set_rax_jmp_data(reinterpret_cast<rax_jmp_data_ptr>(target_func), (uintptr_t)+detour_func);
         VirtualProtect((void *)target_func, sizeof(rax_jmp_data), protect, &protect);
     } else {
         VirtualProtect((void *)target_func, sizeof(rel_jmp_size), PAGE_EXECUTE_READWRITE, &protect);
-        gateway_data_ptr gateway_data = (gateway_data_ptr)(target_func);
-        set_gateway_data(gateway_data, (int32_t)relative_func);
+        set_gateway_data(reinterpret_cast<gateway_data_ptr>(target_func), (int32_t)relative_func);
         VirtualProtect((void *)target_func, sizeof(rel_jmp_size), protect, &protect);
     }
 
@@ -272,19 +285,23 @@ uintptr_t trampoline(
     if (detour_size < rel_jmp_size) {
         return 0;
     }
-
-    uintptr_t gateway = (uintptr_t)VirtualAlloc(NULL, detour_size + rel_jmp_size, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
-    memcpy((void *)gateway, (void *)target_func, detour_size);
-
     uint64_t relative_func = ((uintptr_t)+detour_func - (uintptr_t)target_func - rel_jmp_size);
+    uintptr_t gateway = 0;
+
     if ((relative_func & 0xFFFFFFFF00000000)) {
-        rax_jmp_data_ptr jmp_data = (rax_jmp_data_ptr)(gateway + detour_size);
-        jmp_data->mov_rax = mov_rax;
-        jmp_data->address = (uint64_t)target_func;
-        jmp_data->jmp_rax = jmp_rax;
+        gateway = (uintptr_t)VirtualAlloc(NULL, detour_size+sizeof(rax_jmp_data), MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+        memcpy((void *)gateway, (void *)target_func, detour_size);
+        set_rax_jmp_data(reinterpret_cast<rax_jmp_data_ptr>(gateway + detour_size), (uintptr_t)target_func);
+
+        DWORD protect;
+        VirtualProtect(reinterpret_cast<void *>(gateway), detour_size+rel_jmp_size, PAGE_EXECUTE_READ, &protect);
     } else {
-        gateway_data_ptr gateway_data = (gateway_data_ptr)(gateway + detour_size);
-        set_gateway_data(gateway_data, (int32_t)relative_func);
+        gateway = (uintptr_t)VirtualAlloc(NULL, detour_size+rel_jmp_size, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+        memcpy((void *)gateway, (void *)target_func, detour_size);
+        set_gateway_data(reinterpret_cast<gateway_data_ptr>(gateway+detour_size), (int32_t)relative_func);
+
+        DWORD protect;
+        VirtualProtect(reinterpret_cast<void *>(gateway), detour_size+rel_jmp_size, PAGE_EXECUTE_READ, &protect);
     }
 
     if (detour(target_func, detour_func, original_bytes, original_bytes_size)) {
