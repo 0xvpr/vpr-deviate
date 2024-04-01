@@ -151,10 +151,10 @@ bool vpr_deviate_patch( void*        destination,
 /**
  * Detours the target to another function.
  *
- * @param: void*            target_func,
- * @param: const void*      detour_func,
- * @param: void*            original_bytes,
- * @param: const size_t     original_bytes_size
+ * @param:  void*            target_func,
+ * @param:  const void*      detour_func,
+ * @param:  void*            original_bytes,
+ * @param:  const size_t     original_bytes_size
  *
  * @return: bool            success
 **/
@@ -265,7 +265,7 @@ bool patch( auto&&       destination,
             const size_t size )
 {
     return vpr_deviate_patch( (void *)+destination,
-                              (void *)+source,
+                              (const void *)+source,
                               size );
 }
 
