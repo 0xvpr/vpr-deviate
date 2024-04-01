@@ -16,6 +16,7 @@
 
 
 
+#include <memoryapi.h>
 #ifndef    VC_EXTRA_LEAN
 #define    VC_EXTRA_LEAN
 #endif  // VC_EXTRA_LEAN
@@ -27,10 +28,12 @@
 #include   <stdbool.h>
 #include   <stdint.h>
 #include   <string.h>
+
 #else   // defined(__cplusplus)
 #include   <cstring>
 #include   <cstdint>
 #endif  // defined(__cplusplus)
+#include   <stdio.h>
 
 
 
@@ -55,6 +58,10 @@ constexpr size_t    jmp_rax_size = (sizeof(uint16_t));
 ////////////////////////////////////////////////////////////////////////////////
 
 
+typedef BOOL (WINAPI * VirtualProtect_t)( LPVOID lpAddress,
+                                          SIZE_T dwSize,
+                                          DWORD flNewProtect,
+                                          PDWORD lpflOldProtect );
 
 typedef struct __attribute__((packed)) eax_jmp_data {
     uint16_t    mov_eax     : 16;
@@ -68,10 +75,10 @@ typedef struct __attribute__((packed)) rax_jmp_data {
     uint16_t    jmp_rax     : 16;
 } rax_jmp_data_t, *rax_jmp_data_ptr;
 
-typedef struct __attribute__((packed)) gateway_data {
+typedef struct __attribute__((packed)) rel_jmp_data {
     uint8_t     rel_jmp     :  8;
     int32_t     address     : 32;
-} gateway_data_t, *gateway_data_ptr;
+} rel_jmp_data_t, *rel_jmp_data_ptr;
 
 
 
@@ -83,9 +90,9 @@ void set_rax_jmp_data(rax_jmp_data_ptr jmp_data, uint64_t address) {
 }
 
 __forceinline
-void set_gateway_data(gateway_data_ptr gateway_data, int32_t address) {
-    gateway_data->rel_jmp = rel_jmp;
-    gateway_data->address = address;
+void set_rel_jmp_data(rel_jmp_data_ptr rel_jmp_data, int32_t address) {
+    rel_jmp_data->rel_jmp = rel_jmp;
+    rel_jmp_data->address = address;
 }
 
 
@@ -156,13 +163,13 @@ bool vpr_deviate_patch( void*        destination,
  * @param:  void*            original_bytes,
  * @param:  const size_t     original_bytes_size
  *
- * @return: bool            success
+ * @return: uint64_t         success
 **/
 __forceinline
-bool vpr_deviate_detour( void*        target_func,
-                         const void*  detour_func,
-                         void*        original_bytes,
-                         const size_t original_bytes_size )
+uint64_t vpr_deviate_detour( void*        target_func,
+                             const void*  detour_func,
+                             void*        original_bytes,
+                             const size_t original_bytes_size )
 {
     if (original_bytes) {
         memcpy(original_bytes, target_func, original_bytes_size);
@@ -174,13 +181,57 @@ bool vpr_deviate_detour( void*        target_func,
         VirtualProtect(target_func, sizeof(rax_jmp_data), PAGE_EXECUTE_READWRITE, &protect);
         set_rax_jmp_data((rax_jmp_data_ptr)target_func, (uintptr_t)detour_func);
         VirtualProtect(target_func, sizeof(rax_jmp_data), protect, &protect);
-    } else {
-        VirtualProtect(target_func, sizeof(rel_jmp_size), PAGE_EXECUTE_READWRITE, &protect);
-        set_gateway_data((gateway_data_ptr)target_func, (int32_t)relative_func);
-        VirtualProtect(target_func, sizeof(rel_jmp_size), protect, &protect);
+
+        return sizeof(rax_jmp_data);
     }
 
-    return true;
+    VirtualProtect(target_func, sizeof(rel_jmp_size), PAGE_EXECUTE_READWRITE, &protect);
+    set_rel_jmp_data((rel_jmp_data_ptr)target_func, (int32_t)relative_func);
+    VirtualProtect(target_func, sizeof(rel_jmp_size), protect, &protect);
+
+    return sizeof(rel_jmp_data);
+}
+
+/**
+ * Detours the target to another function.
+ *
+ * @param:  void*            target_func,
+ * @param:  const void*      detour_func,
+ * @param:  void*            original_bytes,
+ * @param:  const size_t     original_bytes_size
+ *
+ * @return: bool            success
+**/
+__forceinline
+uint64_t vpr_deviate_detour_ex( void*            target_func,
+                                const void*      detour_func,
+                                void*            original_bytes,
+                                const size_t     original_bytes_size,
+                                VirtualProtect_t fVirtualProtect )
+{
+    if (!fVirtualProtect) {
+        return 0;
+    }
+
+    if (original_bytes) {
+        for (size_t i = 0; i < original_bytes_size; ++i) ((char *)original_bytes)[i] = ((char *)target_func)[i];
+    }
+
+    DWORD protect;
+    uint64_t relative_func = (uintptr_t)detour_func - (uintptr_t)target_func - rel_jmp_size;
+    if ((relative_func & 0xFFFFFFFF00000000)) {
+        fVirtualProtect(target_func, sizeof(rax_jmp_data), PAGE_EXECUTE_READWRITE, &protect);
+        set_rax_jmp_data((rax_jmp_data_ptr)target_func, (uintptr_t)detour_func);
+        fVirtualProtect(target_func, sizeof(rax_jmp_data), protect, &protect);
+
+        return sizeof(rax_jmp_data);
+    }
+
+    fVirtualProtect(target_func, sizeof(rel_jmp_size), PAGE_EXECUTE_READWRITE, &protect);
+    set_rel_jmp_data((rel_jmp_data_ptr)target_func, (int32_t)relative_func);
+    fVirtualProtect(target_func, sizeof(rel_jmp_size), protect, &protect);
+
+    return sizeof(rel_jmp_data);
 }
 
 /**
@@ -212,8 +263,8 @@ void* vpr_deviate_trampoline( void*       target_func,
     memcpy((void *)gateway, (void *)target_func, detour_size);
 
     int32_t relative_addr = (int32_t)((uintptr_t)detour_func - (uintptr_t)target_func - rel_jmp_size);
-    gateway_data_ptr gateway_data = (gateway_data_ptr)((uintptr_t)gateway + detour_size);
-    set_gateway_data(gateway_data, relative_addr);
+    rel_jmp_data_ptr rel_jmp_data = (rel_jmp_data_ptr)((uintptr_t)gateway + detour_size);
+    set_rel_jmp_data(rel_jmp_data, relative_addr);
 
     if (vpr_deviate_detour(target_func, detour_func, original_bytes, original_bytes_size)) {
         return gateway;
@@ -277,13 +328,13 @@ bool patch( auto&&       destination,
  * @param:  auto&&          original_bytes
  * @param:  const size_t    original_bytes_size
  *
- * @return: bool            success
+ * @return: uint64_t         success
 **/
 __forceinline
-bool detour( auto&&       target_func,
-             auto&&       detour_func,
-             auto&&       original_bytes = nullptr,
-             const size_t original_bytes_size = rel_jmp_size )
+uint64_t detour( auto&&       target_func,
+                 auto&&       detour_func,
+                 auto&&       original_bytes = nullptr,
+                 const size_t original_bytes_size = rel_jmp_size )
 {
     return vpr_deviate_detour( (void *)+target_func,
                                (const void *)+detour_func,
@@ -316,6 +367,85 @@ void* trampoline( auto&&       target_func,
                                    original_bytes_size );
 
 }
+
+class [[nodiscard]] interceptor {
+public:
+    interceptor() = delete;
+    interceptor(const interceptor &) = delete;
+    interceptor& operator = (const interceptor &) = delete;
+    interceptor(interceptor&&) = delete;
+    interceptor& operator = (interceptor &&) = delete;
+
+    __forceinline
+    explicit constexpr interceptor( auto&& target_func,
+                                    auto&& detour_func )
+    : target_func_((uintptr_t)+target_func)
+    , detour_func_((uintptr_t)+detour_func)
+    , original_data_(*((original_data_ptr)(target_func_)))
+    {
+    }
+
+    __forceinline
+    uint64_t relative_addr() const {
+        return detour_func_ - target_func_ - rel_jmp_size;
+    }
+
+    __forceinline
+    uint64_t detour() const {
+        return vpr::deviate::detour( target_func_,
+                                     detour_func_,
+                                     nullptr );
+    }
+
+    __forceinline
+    uint64_t detour( auto&&       original_bytes = nullptr,
+                     const size_t original_bytes_size = rel_jmp_size ) const
+    {
+        return vpr::deviate::detour( target_func_,
+                                     detour_func_,
+                                     original_bytes,
+                                     original_bytes_size );
+    }
+
+    /*__forceinline*/
+    /*uint64_t detour(VirtualProtect_t fVirtualProtect) {*/
+        /*return vpr_deviate_detour_ex(target_func_, detour_func_)*/
+    /*}*/
+
+    __forceinline
+    bool restore() const {
+        return vpr::deviate::patch( target_func_,
+                                    &original_data_,
+                                    relative_addr() < 0x100000000 ?
+                                        sizeof(rel_jmp_data)    :
+                                        sizeof(rax_jmp_data));
+    }
+
+    __forceinline
+    uintptr_t trampoline(
+                  const size_t detour_size,
+                  auto&&       original_bytes = nullptr,
+                  const size_t original_bytes_size = rel_jmp_size ) const
+    {
+        return vpr::deviate::trampoline( target_func_,
+                                         detour_func_,
+                                         detour_size,
+                                         original_bytes,
+                                         original_bytes_size );
+    }
+
+private:
+    typedef struct {
+        union {
+            rax_jmp_data rax_jmp_data_;
+            rel_jmp_data rel_jmp_data_;
+        };
+    } original_data, *original_data_ptr;
+
+    uintptr_t           target_func_;
+    uintptr_t           detour_func_;
+    const original_data original_data_;
+}; // class interceptor
 
 } // namespace memory
 } // namespace vpr
