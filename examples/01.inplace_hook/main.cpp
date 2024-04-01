@@ -21,20 +21,24 @@ void bar(int x) {
 }
 
 int main() {
+    // C API
     foo(5);
     vpr_deviate_detour( (uintptr_t)foo,
                         (uintptr_t)bar,
                         (uintptr_t)original_bytes,
                         sizeof(original_bytes) );
+    // C++ api
     foo(5);
     vpr::deviate::detour( foo,
                           [](int x) { printf("%d\n", 5*x); },
                           nullptr,
                           sizeof(original_bytes) );
     foo(5);
-    vpr::deviate::restore( foo,
-                           original_bytes,
-                           sizeof(original_bytes) );
+
+    // Restoration
+    vpr::deviate::patch( foo,
+                         original_bytes,
+                         sizeof(original_bytes) );
     foo(5);
 
     return 0;

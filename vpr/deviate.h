@@ -3,7 +3,7 @@
  * Created:         March 28th, 2024
  *
  * Updated by:      VPR (0xvpr)
- * Updated:         March 28th, 2024
+ * Updated:         April 1st, 2024
  *
  * Description:     C99/C++20 Header only library for memory management in Windows.
  *
@@ -78,6 +78,7 @@ typedef struct __attribute__((packed)) gateway_data {
 } gateway_data_t, *gateway_data_ptr;
 
 
+
 __forceinline
 void set_rax_jmp_data(rax_jmp_data_ptr jmp_data, uint64_t address) {
     jmp_data->mov_rax = mov_rax;
@@ -91,65 +92,118 @@ void set_gateway_data(gateway_data_ptr gateway_data, int32_t address) {
     gateway_data->address = address; // address after detour patch
 }
 
+
+
 /**
  * TODO
 **/
 __forceinline
-bool vpr_deviate_detour(
-    uintptr_t       target_addr,
-    uintptr_t       detour_addr,
-    uintptr_t       original_bytes,
-    size_t          original_bytes_size
-)
-{
-    if (original_bytes_size < rel_jmp_size) {
+uintptr_t vpr_deviate_resolve_dynamic_address(
+    uintptr_t       address,
+    uint16_t*       offsets,
+    size_t          size
+) { 
+    for (size_t i = 0; i < size; i++) {
+        if (!address) {
+            return 0;
+        }
+
+        address = *(uintptr_t *)address;
+        address += offsets[i];
+
+        if (!address || *(uintptr_t *)address == 0) {
+            return 0;
+        }
+    }
+
+    return address;
+}
+
+/**
+ * TODO
+**/
+__forceinline
+bool vpr_deviate_patch(
+    uintptr_t       destination,
+    uintptr_t       source,
+    size_t          size
+) {
+    DWORD protect;
+    if (!VirtualProtect((void *)destination, size, PAGE_EXECUTE_READWRITE, &protect)) {
         return false;
     }
 
-    memcpy((void *)original_bytes, (void *)target_addr, original_bytes_size);
+    memcpy((void *)destination, (void *)source, size);
 
-    DWORD dwProtect;
-    VirtualProtect((void *)target_addr, original_bytes_size, PAGE_EXECUTE_READWRITE, &dwProtect);
-
-    int32_t relative_addr = (int32_t)(detour_addr - target_addr - rel_jmp_size);
-    gateway_data_ptr gateway_data = (gateway_data_ptr)(target_addr);
-    set_gateway_data(gateway_data, relative_addr);
-
-    VirtualProtect((void *)target_addr, original_bytes_size, dwProtect, &dwProtect);
+    if (!VirtualProtect((void *)destination, size, protect, &protect)) {
+        return false;
+    }
 
     return true;
 }
 
 /**
- * Hooks into a function and detours the target function to another function, then jumps back.
+ * TODO
+**/
+__forceinline
+bool vpr_deviate_detour(
+    uintptr_t       target_func,
+    uintptr_t       detour_func,
+    uintptr_t       original_bytes,
+    size_t          original_bytes_size
+) {
+    if (original_bytes) {
+        memcpy((void *)original_bytes, (void *)target_func, original_bytes_size);
+    }
+
+    DWORD protect;
+    uint64_t relative_func = detour_func - target_func - rel_jmp_size;
+    if ((relative_func & 0xFFFFFFFF00000000)) {
+        VirtualProtect((void *)target_func, sizeof(rax_jmp_data), PAGE_EXECUTE_READWRITE, &protect);
+        rax_jmp_data_ptr jmp_data = (rax_jmp_data_ptr)(target_func);
+        set_rax_jmp_data(jmp_data, (uintptr_t)detour_func);
+        VirtualProtect((void *)target_func, sizeof(rax_jmp_data), protect, &protect);
+    } else {
+        VirtualProtect((void *)target_func, sizeof(rel_jmp_size), PAGE_EXECUTE_READWRITE, &protect);
+        gateway_data_ptr gateway_data = (gateway_data_ptr)(target_func);
+        set_gateway_data(gateway_data, (int32_t)relative_func);
+        VirtualProtect((void *)target_func, sizeof(rel_jmp_size), protect, &protect);
+    }
+
+    return true;
+}
+
+/**
+ * Detours the target to another function then returns a gateway address to the original target.
  *
- * @param:  uintptr_t target_addr
- * @param:  uintptr_t hook_addr
- * @param:  size_t hook_size
+ * @param: uintptr_t  target_func,
+ * @param: uintptr_t  detour_func,
+ * @param: size_t     detour_size,
+ * @param: uintptr_t  original_bytes,
+ * @param: size_t     original_bytes_size
  *
- * @return: return address (needs to be freed via VirtualFree by the caller).
+ * @return: uintptr_t gateway_address (needs to be freed via VirtualFree by the caller when non-zero).
 **/
 __forceinline
 uintptr_t vpr_deviate_tramp_hook(
-    uintptr_t       target_addr,
-    uintptr_t       hook_addr,
-    size_t          hook_size,
+    uintptr_t       target_func,
+    uintptr_t       detour_func,
+    size_t          detour_size,
     uintptr_t       original_bytes,
     size_t          original_bytes_size
-)
-{
-    if (hook_size < rel_jmp_size) {
+) {
+    if (detour_size < rel_jmp_size) {
         return 0;
     }
 
-    uintptr_t gateway = (uintptr_t)VirtualAlloc(NULL, hook_size + rel_jmp_size, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
-    memcpy((void *)gateway, (void *)target_addr, hook_size);
+    uintptr_t gateway = (uintptr_t)VirtualAlloc(NULL, detour_size + rel_jmp_size, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    memcpy((void *)gateway, (void *)target_func, detour_size);
 
-    int32_t relative_addr = (int32_t)(hook_addr - target_addr - rel_jmp_size);
-    gateway_data_ptr gateway_data = (gateway_data_ptr)(gateway + hook_size);
+    int32_t relative_addr = (int32_t)(detour_func - target_func - rel_jmp_size);
+    gateway_data_ptr gateway_data = (gateway_data_ptr)(gateway + detour_size);
     set_gateway_data(gateway_data, relative_addr);
 
-    if (vpr_deviate_detour(target_addr, hook_addr, original_bytes, original_bytes_size)) {
+    if (vpr_deviate_detour(target_func, detour_func, original_bytes, original_bytes_size)) {
         return gateway;
     }
 
@@ -173,74 +227,94 @@ bool detour(
     auto&&          target_func,
     auto&&          detour_func,
     auto&&          original_bytes = nullptr,
-    size_t          original_bytes_size = 5
-)
-{
-    if (original_bytes_size < rel_jmp_size) {
-        return false;
-    }
-
+    size_t          original_bytes_size = rel_jmp_size
+) {
     if (original_bytes) {
         memcpy((void *)original_bytes, (void *)target_func, original_bytes_size);
     }
 
-    DWORD dwProtect;
-    VirtualProtect((void *)target_func, original_bytes_size, PAGE_EXECUTE_READWRITE, &dwProtect);
-
-    int32_t relative_func = (int32_t)((uintptr_t)+detour_func - (uintptr_t)target_func - rel_jmp_size);
-    gateway_data_ptr gateway_data = (gateway_data_ptr)(target_func);
-    set_gateway_data(gateway_data, relative_func);
-
-    VirtualProtect((void *)target_func, original_bytes_size, dwProtect, &dwProtect);
+    DWORD protect;
+    uint64_t relative_func = (uintptr_t)+detour_func - (uintptr_t)target_func - rel_jmp_size;
+    if ((relative_func & 0xFFFFFFFF00000000)) {
+        VirtualProtect((void *)target_func, sizeof(rax_jmp_data), PAGE_EXECUTE_READWRITE, &protect);
+        rax_jmp_data_ptr jmp_data = (rax_jmp_data_ptr)(target_func);
+        set_rax_jmp_data(jmp_data, (uintptr_t)+detour_func);
+        VirtualProtect((void *)target_func, sizeof(rax_jmp_data), protect, &protect);
+    } else {
+        VirtualProtect((void *)target_func, sizeof(rel_jmp_size), PAGE_EXECUTE_READWRITE, &protect);
+        gateway_data_ptr gateway_data = (gateway_data_ptr)(target_func);
+        set_gateway_data(gateway_data, (int32_t)relative_func);
+        VirtualProtect((void *)target_func, sizeof(rel_jmp_size), protect, &protect);
+    }
 
     return true;
 }
 
 /**
- * Hooks into a function and detours the target function to another function, then jumps back.
+ * Detours the target to another function then returns a gateway address to the original target.
  *
- * @param:  uintptr_t target_addr
- * @param:  uintptr_t hook_addr
- * @param:  size_t hook_size
+ * @param: auto&&     target_func,
+ * @param: auto&&     detour_func,
+ * @param: size_t     detour_size,
+ * @param: auto&&     original_bytes,
+ * @param: size_t     original_bytes_size
  *
- * @return: return address (needs to be freed via VirtualFree by the caller).
+ * @return: uintptr_t gateway_address (needs to be freed via VirtualFree by the caller when non-zero).
 **/
 __forceinline
 uintptr_t trampoline(
     auto&&          target_func,
-    auto&&          hook_func,
-    size_t          hook_size,
+    auto&&          detour_func,
+    size_t          detour_size,
     auto&&          original_bytes,
     size_t          original_bytes_size
-)
-{
-    if (hook_size < rel_jmp_size) {
+) {
+    if (detour_size < rel_jmp_size) {
         return 0;
     }
 
-    uintptr_t gateway = (uintptr_t)VirtualAlloc(NULL, hook_size + rel_jmp_size, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
-    memcpy((void *)gateway, (void *)target_func, hook_size);
+    uintptr_t gateway = (uintptr_t)VirtualAlloc(NULL, detour_size + rel_jmp_size, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+    memcpy((void *)gateway, (void *)target_func, detour_size);
 
-    int32_t relative_func = (int32_t)((uintptr_t)+hook_func - (uintptr_t)target_func - rel_jmp_size);
-    gateway_data_ptr gateway_data = (gateway_data_ptr)(gateway + hook_size);
-    set_gateway_data(gateway_data, relative_func);
+    uint64_t relative_func = ((uintptr_t)+detour_func - (uintptr_t)target_func - rel_jmp_size);
+    if ((relative_func & 0xFFFFFFFF00000000)) {
+        rax_jmp_data_ptr jmp_data = (rax_jmp_data_ptr)(gateway + detour_size);
+        jmp_data->mov_rax = mov_rax;
+        jmp_data->address = (uint64_t)target_func;
+        jmp_data->jmp_rax = jmp_rax;
+    } else {
+        gateway_data_ptr gateway_data = (gateway_data_ptr)(gateway + detour_size);
+        set_gateway_data(gateway_data, (int32_t)relative_func);
+    }
 
-    if (detour(target_func, hook_func, original_bytes, original_bytes_size)) {
+    if (detour(target_func, detour_func, original_bytes, original_bytes_size)) {
         return gateway;
     }
 
     return 0;
 }
 
+/**
+ * TODO
+**/
 __forceinline
-void restore( auto&& target_func,
-              auto&& original_bytes,
-              size_t original_bytes_size )
-{
+bool patch(
+    auto&&          destination,
+    auto&&          source,
+    size_t          size
+) {
     DWORD protect;
-    VirtualProtect((void *)target_func, original_bytes_size, PAGE_READWRITE, &protect);
-    memcpy((void *)target_func, original_bytes, original_bytes_size);
-    VirtualProtect((void *)target_func, original_bytes_size, protect, &protect);
+    if (!VirtualProtect((void *)destination, size, PAGE_EXECUTE_READWRITE, &protect)) {
+        return false;
+    }
+
+    memcpy((void *)destination, (void *)source, size);
+
+    if (!VirtualProtect((void *)destination, size, protect, &protect)) {
+        return false;
+    }
+
+    return true;
 }
 
 } // namespace memory
