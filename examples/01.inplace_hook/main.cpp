@@ -2,7 +2,7 @@
 
 #include <stdio.h>
 
-unsigned char original_bytes[rel_jmp_size];
+unsigned char original_bytes[_rel_jmp_size_];
 
 void foo(int x) {
     fprintf(stdout, "%d\n", x);
@@ -11,12 +11,12 @@ void foo(int x) {
 void bar(int x) {
     fprintf(stdout, "hooked ");
 
-    size_t size = (sizeof(original_bytes)+sizeof(rax_jmp_data));
+    size_t size = (sizeof(original_bytes)+sizeof(rax_jmp_data_t));
     unsigned char* jump_back = (unsigned char *)VirtualAlloc(NULL, size, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
     memcpy(jump_back, original_bytes, sizeof(original_bytes));
 
     rax_jmp_data_ptr jmp_data = (rax_jmp_data_ptr)(jump_back+sizeof(original_bytes));
-    set_rax_jmp_data(jmp_data, (uint64_t)foo+rel_jmp_size);
+    set_rax_jmp_data(jmp_data, (uint64_t)foo+_rel_jmp_size_);
 
     ((decltype(&foo))jump_back)(x);
     VirtualFree(jump_back, size, MEM_RELEASE | MEM_FREE);
