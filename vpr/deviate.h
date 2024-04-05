@@ -37,17 +37,17 @@
 
 
 #if        !defined(__cplusplus)
-#define             rel_jmp      ( ((uint8_t)0xE9) )
-#define             rel_jmp_size ( ((sizeof(uint32_t)+1)) )
-#define             mov_rax      ( (((uint16_t)(0x1234)) & 0xFF) == 0x34 ? 0xB848 : 0x48B8 )
-#define             jmp_rax      ( (((uint16_t)(0x1234)) & 0xFF) == 0x34 ? 0xE0FF : 0xFFE0 )
-#define             jmp_rax_size ( (sizeof(uint16_t)) )
+#define             _rel_jmp_      ( ((uint8_t)0xE9) )
+#define             _rel_jmp_size_ ( ((sizeof(uint32_t)+1)) )
+#define             _mov_rax_      ( (((uint16_t)(0x1234)) & 0xFF) == 0x34 ? 0xB848 : 0x48B8 )
+#define             _jmp_rax_      ( (((uint16_t)(0x1234)) & 0xFF) == 0x34 ? 0xE0FF : 0xFFE0 )
+#define             _jmp_rax_size_ ( (sizeof(uint16_t)) )
 #else   // defined(__cplusplus)
-constexpr uint8_t   rel_jmp      = (uint8_t)0xE9;
-constexpr uint32_t  rel_jmp_size = ((sizeof(uint32_t)+1));
-constexpr uint16_t  mov_rax      = (((uint16_t)(0x1234)) & 0xFF) == 0x34 ? 0xB848 : 0x48B8;
-constexpr uint16_t  jmp_rax      = (((uint16_t)(0x1234)) & 0xFF) == 0x34 ? 0xE0FF : 0xFFE0;
-constexpr size_t    jmp_rax_size = (sizeof(uint16_t));
+constexpr uint8_t   _rel_jmp_      = (uint8_t)0xE9;
+constexpr uint32_t  _rel_jmp_size_ = ((sizeof(uint32_t)+1));
+constexpr uint16_t  _mov_rax_      = (((uint16_t)(0x1234)) & 0xFF) == 0x34 ? 0xB848 : 0x48B8;
+constexpr uint16_t  _jmp_rax_      = (((uint16_t)(0x1234)) & 0xFF) == 0x34 ? 0xE0FF : 0xFFE0;
+/*constexpr size_t    _jmp_rax_size_ = (sizeof(uint16_t));*/
 #endif  // defined(__cplusplus)
 
 
@@ -83,14 +83,14 @@ typedef struct __attribute__((packed)) rel_jmp_data {
 
 __forceinline
 void set_rax_jmp_data(rax_jmp_data_ptr jmp_data, uint64_t address) {
-    jmp_data->mov_rax = mov_rax;
+    jmp_data->mov_rax = _mov_rax_;
     jmp_data->address = address;
-    jmp_data->jmp_rax = jmp_rax;
+    jmp_data->jmp_rax = _jmp_rax_;
 }
 
 __forceinline
 void set_rel_jmp_data(rel_jmp_data_ptr rel_jmp_data, int32_t address) {
-    rel_jmp_data->rel_jmp = rel_jmp;
+    rel_jmp_data->rel_jmp = _rel_jmp_;
     rel_jmp_data->address = address;
 }
 
@@ -175,7 +175,7 @@ uint64_t vpr_deviate_detour( void*        target_func,
     }
 
     DWORD protect;
-    uint64_t relative_func = (uintptr_t)detour_func - (uintptr_t)target_func - rel_jmp_size;
+    uint64_t relative_func = (uintptr_t)detour_func - (uintptr_t)target_func - _rel_jmp_size_;
     if ((relative_func & 0xFFFFFFFF00000000)) {
         VirtualProtect(target_func, sizeof(rax_jmp_data), PAGE_EXECUTE_READWRITE, &protect);
         set_rax_jmp_data((rax_jmp_data_ptr)target_func, (uintptr_t)detour_func);
@@ -184,9 +184,9 @@ uint64_t vpr_deviate_detour( void*        target_func,
         return sizeof(rax_jmp_data);
     }
 
-    VirtualProtect(target_func, sizeof(rel_jmp_size), PAGE_EXECUTE_READWRITE, &protect);
+    VirtualProtect(target_func, sizeof(_rel_jmp_size_), PAGE_EXECUTE_READWRITE, &protect);
     set_rel_jmp_data((rel_jmp_data_ptr)target_func, (int32_t)relative_func);
-    VirtualProtect(target_func, sizeof(rel_jmp_size), protect, &protect);
+    VirtualProtect(target_func, sizeof(_rel_jmp_size_), protect, &protect);
 
     return sizeof(rel_jmp_data);
 }
@@ -217,7 +217,7 @@ uint64_t vpr_deviate_detour_ex( void*            target_func,
     }
 
     DWORD protect;
-    uint64_t relative_func = (uintptr_t)detour_func - (uintptr_t)target_func - rel_jmp_size;
+    uint64_t relative_func = (uintptr_t)detour_func - (uintptr_t)target_func - _rel_jmp_size_;
     if ((relative_func & 0xFFFFFFFF00000000)) {
         fVirtualProtect(target_func, sizeof(rax_jmp_data), PAGE_EXECUTE_READWRITE, &protect);
         set_rax_jmp_data((rax_jmp_data_ptr)target_func, (uintptr_t)detour_func);
@@ -226,9 +226,9 @@ uint64_t vpr_deviate_detour_ex( void*            target_func,
         return sizeof(rax_jmp_data);
     }
 
-    fVirtualProtect(target_func, sizeof(rel_jmp_size), PAGE_EXECUTE_READWRITE, &protect);
+    fVirtualProtect(target_func, sizeof(_rel_jmp_size_), PAGE_EXECUTE_READWRITE, &protect);
     set_rel_jmp_data((rel_jmp_data_ptr)target_func, (int32_t)relative_func);
-    fVirtualProtect(target_func, sizeof(rel_jmp_size), protect, &protect);
+    fVirtualProtect(target_func, sizeof(_rel_jmp_size_), protect, &protect);
 
     return sizeof(rel_jmp_data);
 }
@@ -251,17 +251,17 @@ void* vpr_deviate_trampoline( void*       target_func,
                               void*       original_bytes,
                               size_t      original_bytes_size )
 {
-    if (detour_size < rel_jmp_size) {
+    if (detour_size < _rel_jmp_size_) {
         return NULL;
     }
 
     void* gateway;
-    if (!(gateway = VirtualAlloc(NULL, detour_size + rel_jmp_size, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE))) {
+    if (!(gateway = VirtualAlloc(NULL, detour_size + _rel_jmp_size_, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE))) {
         return NULL;
     }
     memcpy((void *)gateway, (void *)target_func, detour_size);
 
-    int32_t relative_addr = (int32_t)((uintptr_t)detour_func - (uintptr_t)target_func - rel_jmp_size);
+    int32_t relative_addr = (int32_t)((uintptr_t)detour_func - (uintptr_t)target_func - _rel_jmp_size_);
     rel_jmp_data_ptr rel_jmp_data = (rel_jmp_data_ptr)((uintptr_t)gateway + detour_size);
     set_rel_jmp_data(rel_jmp_data, relative_addr);
 
@@ -334,7 +334,7 @@ __forceinline
 uint64_t detour( auto&&       target_func,
                  auto&&       detour_func,
                  auto&&       original_bytes = nullptr,
-                 const size_t original_bytes_size = rel_jmp_size )
+                 const size_t original_bytes_size = _rel_jmp_size_ )
 {
     return vpr_deviate_detour( (void *)+target_func,
                                (const void *)+detour_func,
@@ -358,7 +358,7 @@ void* trampoline( auto&&       target_func,
                   auto&&       detour_func,
                   const size_t detour_size,
                   auto&&       original_bytes = nullptr,
-                  const size_t original_bytes_size = rel_jmp_size )
+                  const size_t original_bytes_size = _rel_jmp_size_ )
 {
     return vpr_deviate_trampoline( (void *)+target_func,
                                    (const void *)+detour_func,
@@ -391,7 +391,7 @@ public:
 
     __forceinline
     uint64_t relative_addr() const {
-        return detour_func_ - target_func_ - rel_jmp_size;
+        return detour_func_ - target_func_ - _rel_jmp_size_;
     }
 
     __forceinline
@@ -403,7 +403,7 @@ public:
 
     __forceinline
     uint64_t detour( auto&&       original_bytes = nullptr,
-                     const size_t original_bytes_size = rel_jmp_size ) const
+                     const size_t original_bytes_size = _rel_jmp_size_ ) const
     {
         return vpr::deviate::detour( target_func_,
                                      detour_func_,
@@ -429,7 +429,7 @@ public:
     uintptr_t trampoline(
                   const size_t detour_size,
                   auto&&       original_bytes = nullptr,
-                  const size_t original_bytes_size = rel_jmp_size ) const
+                  const size_t original_bytes_size = _rel_jmp_size_ ) const
     {
         return vpr::deviate::trampoline( target_func_,
                                          detour_func_,
