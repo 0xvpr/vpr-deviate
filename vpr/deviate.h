@@ -3,7 +3,7 @@
  * Created:         March 28th, 2024
  *
  * Updated by:      VPR (0xvpr)
- * Updated:         April 1st, 2024
+ * Updated:         April 5th, 2024
  *
  * Description:     C99/C++20 Header only library for memory management in Windows.
  *
@@ -62,19 +62,19 @@ typedef BOOL (WINAPI * VirtualProtect_t)( LPVOID lpAddress,
                                           DWORD flNewProtect,
                                           PDWORD lpflOldProtect );
 
-typedef struct __attribute__((packed)) eax_jmp_data {
+typedef struct __attribute__((packed)) _eax_jmp_data {
     uint16_t    mov_eax     : 16;
     uint32_t    address     : 32;
     uint16_t    jmp_eax     : 16;
 } eax_jmp_data_t, *eax_jmp_data_ptr;
 
-typedef struct __attribute__((packed)) rax_jmp_data {
+typedef struct __attribute__((packed)) _rax_jmp_data {
     uint16_t    mov_rax     : 16;
     uint64_t    address     : 64;
     uint16_t    jmp_rax     : 16;
 } rax_jmp_data_t, *rax_jmp_data_ptr;
 
-typedef struct __attribute__((packed)) rel_jmp_data {
+typedef struct __attribute__((packed)) _rel_jmp_data {
     uint8_t     rel_jmp     :  8;
     int32_t     address     : 32;
 } rel_jmp_data_t, *rel_jmp_data_ptr;
@@ -177,18 +177,18 @@ uint64_t vpr_deviate_detour( void*        target_func,
     DWORD protect;
     uint64_t relative_func = (uintptr_t)detour_func - (uintptr_t)target_func - _rel_jmp_size_;
     if ((relative_func & 0xFFFFFFFF00000000)) {
-        VirtualProtect(target_func, sizeof(rax_jmp_data), PAGE_EXECUTE_READWRITE, &protect);
+        VirtualProtect(target_func, sizeof(rax_jmp_data_t), PAGE_EXECUTE_READWRITE, &protect);
         set_rax_jmp_data((rax_jmp_data_ptr)target_func, (uintptr_t)detour_func);
-        VirtualProtect(target_func, sizeof(rax_jmp_data), protect, &protect);
+        VirtualProtect(target_func, sizeof(rax_jmp_data_t), protect, &protect);
 
-        return sizeof(rax_jmp_data);
+        return sizeof(rax_jmp_data_t);
     }
 
     VirtualProtect(target_func, sizeof(_rel_jmp_size_), PAGE_EXECUTE_READWRITE, &protect);
     set_rel_jmp_data((rel_jmp_data_ptr)target_func, (int32_t)relative_func);
     VirtualProtect(target_func, sizeof(_rel_jmp_size_), protect, &protect);
 
-    return sizeof(rel_jmp_data);
+    return sizeof(rel_jmp_data_t);
 }
 
 /**
@@ -219,18 +219,18 @@ uint64_t vpr_deviate_detour_ex( void*            target_func,
     DWORD protect;
     uint64_t relative_func = (uintptr_t)detour_func - (uintptr_t)target_func - _rel_jmp_size_;
     if ((relative_func & 0xFFFFFFFF00000000)) {
-        fVirtualProtect(target_func, sizeof(rax_jmp_data), PAGE_EXECUTE_READWRITE, &protect);
+        fVirtualProtect(target_func, sizeof(rax_jmp_data_t), PAGE_EXECUTE_READWRITE, &protect);
         set_rax_jmp_data((rax_jmp_data_ptr)target_func, (uintptr_t)detour_func);
-        fVirtualProtect(target_func, sizeof(rax_jmp_data), protect, &protect);
+        fVirtualProtect(target_func, sizeof(rax_jmp_data_t), protect, &protect);
 
-        return sizeof(rax_jmp_data);
+        return sizeof(rax_jmp_data_t);
     }
 
     fVirtualProtect(target_func, sizeof(_rel_jmp_size_), PAGE_EXECUTE_READWRITE, &protect);
     set_rel_jmp_data((rel_jmp_data_ptr)target_func, (int32_t)relative_func);
     fVirtualProtect(target_func, sizeof(_rel_jmp_size_), protect, &protect);
 
-    return sizeof(rel_jmp_data);
+    return sizeof(rel_jmp_data_t);
 }
 
 /**
@@ -421,8 +421,8 @@ public:
         return vpr::deviate::patch( target_func_,
                                     &original_data_,
                                     relative_addr() < 0x100000000 ?
-                                        sizeof(rel_jmp_data)    :
-                                        sizeof(rax_jmp_data));
+                                        sizeof(rel_jmp_data_t)    :
+                                        sizeof(rax_jmp_data_t));
     }
 
     __forceinline
@@ -441,8 +441,8 @@ public:
 private:
     typedef struct {
         union {
-            rax_jmp_data rax_jmp_data_;
-            rel_jmp_data rel_jmp_data_;
+            rax_jmp_data_t rax_jmp_data_;
+            rel_jmp_data_t rel_jmp_data_;
         };
     } original_data, *original_data_ptr;
 
