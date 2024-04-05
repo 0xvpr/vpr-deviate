@@ -184,9 +184,9 @@ uint64_t vpr_deviate_detour( void*        target_func,
         return sizeof(rax_jmp_data_t);
     }
 
-    VirtualProtect(target_func, sizeof(_rel_jmp_size_), PAGE_EXECUTE_READWRITE, &protect);
+    VirtualProtect(target_func, _rel_jmp_size_, PAGE_EXECUTE_READWRITE, &protect);
     set_rel_jmp_data((rel_jmp_data_ptr)target_func, (int32_t)relative_func);
-    VirtualProtect(target_func, sizeof(_rel_jmp_size_), protect, &protect);
+    VirtualProtect(target_func, _rel_jmp_size_, protect, &protect);
 
     return sizeof(rel_jmp_data_t);
 }
@@ -226,9 +226,9 @@ uint64_t vpr_deviate_detour_ex( void*            target_func,
         return sizeof(rax_jmp_data_t);
     }
 
-    fVirtualProtect(target_func, sizeof(_rel_jmp_size_), PAGE_EXECUTE_READWRITE, &protect);
+    fVirtualProtect(target_func, _rel_jmp_size_, PAGE_EXECUTE_READWRITE, &protect);
     set_rel_jmp_data((rel_jmp_data_ptr)target_func, (int32_t)relative_func);
-    fVirtualProtect(target_func, sizeof(_rel_jmp_size_), protect, &protect);
+    fVirtualProtect(target_func, _rel_jmp_size_, protect, &protect);
 
     return sizeof(rel_jmp_data_t);
 }
