@@ -23,14 +23,16 @@ void bar(int x) {
 }
 
 int main() {
-    // C API
     foo(5);
+
+    // C API
     vpr_deviate_detour( (void *)foo,
                         (void *)bar,
                         (void *)original_bytes,
                         sizeof(original_bytes) );
-    // C++ API
     foo(5);
+
+    // C++ API
     vpr::deviate::detour( foo,
                           [](int x) { printf("%d\n", 5*x); },
                           nullptr,
@@ -48,6 +50,7 @@ int main() {
                                                   []() { puts("interceptor"); } );
     interceptor.detour();
     foo(5);
+
     interceptor.restore();
     foo(5);
 

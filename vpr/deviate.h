@@ -89,6 +89,7 @@ void set_rel_jmp_data(rel_jmp_data_ptr rel_jmp_data, int32_t address) {
     rel_jmp_data->address = address;
 }
 
+
 /**
  * Direct Syscall of NtProtectVirtualMemory.
  *
