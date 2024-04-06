@@ -100,7 +100,7 @@ void set_rel_jmp_data(rel_jmp_data_ptr rel_jmp_data, int32_t address) {
  *
  * @return: uintptr_t       resolved_address
 **/
-static
+inline
 NTSTATUS __declspec(naked) fNtProtectVirtualMemory( /* HANDLE  process_handle, */
                                                     /* PVOID*  base_address,   */
                                                     /* PSIZE_T size_ptr,       */
