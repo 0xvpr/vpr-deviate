@@ -101,13 +101,15 @@ void set_rel_jmp_data(rel_jmp_data_ptr rel_jmp_data, int32_t address) {
  * @return: uintptr_t       resolved_address
 **/
 static
-NTSTATUS __declspec(naked) fNtProtectVirtualMemory( ...
-                                                    /* HANDLE  process_handle, */
+NTSTATUS __declspec(naked) fNtProtectVirtualMemory( /* HANDLE  process_handle, */
                                                     /* PVOID*  base_address,   */
                                                     /* PSIZE_T size_ptr,       */
                                                     /* DWORD   protect,        */
-                                                    /* PDWORD  old_protect     */ )
-{
+                                                    /* PDWORD  old_protect     */
+#if defined(__cplusplus)
+                                                    ... // set variable args for C++ implementations
+#endif
+) {
     __asm__ __volatile__(
         ".byte 0x49, 0x89, 0xCA\n\t"              // mov r10, rcx
         ".byte 0xB8, 0x50, 0x00, 0x00, 0x00\n\t"  // mov eax, 0x50
