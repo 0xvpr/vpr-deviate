@@ -57,11 +57,6 @@ constexpr uint16_t  _jmp_rax_      = (((uint16_t)(0x1234)) & 0xFF) == 0x34 ? 0xE
 ////////////////////////////////////////////////////////////////////////////////
 
 
-typedef BOOL (WINAPI * VirtualProtect_t)( LPVOID lpAddress,
-                                          SIZE_T dwSize,
-                                          DWORD flNewProtect,
-                                          PDWORD lpflOldProtect );
-
 typedef struct __attribute__((packed)) _eax_jmp_data {
     uint16_t    mov_eax     : 16;
     uint32_t    address     : 32;
@@ -94,7 +89,56 @@ void set_rel_jmp_data(rel_jmp_data_ptr rel_jmp_data, int32_t address) {
     rel_jmp_data->address = address;
 }
 
+/**
+ * Direct Syscall of NtProtectVirtualMemory.
+ *
+ * @param:   HANDLE         process_handle,
+ * @param:   PVOID*         base_address,
+ * @param:   PSIZE_T        size_ptr,
+ * @param:   DWORD          protect,
+ * @param:   PDWORD         old_protect
+ *
+ * @return: uintptr_t       resolved_address
+**/
+static
+NTSTATUS __declspec(naked) fNtProtectVirtualMemory( ...
+                                                    /* HANDLE  process_handle, */
+                                                    /* PVOID*  base_address,   */
+                                                    /* PSIZE_T size_ptr,       */
+                                                    /* DWORD   protect,        */
+                                                    /* PDWORD  old_protect     */ )
+{
+    __asm__ __volatile__(
+        ".byte 0x49, 0x89, 0xCA\n\t"              // mov r10, rcx
+        ".byte 0xB8, 0x50, 0x00, 0x00, 0x00\n\t"  // mov eax, 0x50
+        ".byte 0x0F, 0x05\n\t"                    // syscall
+        ".byte 0xC3"                              // ret
+    );
+}
 
+/**
+ * Custom implementation of memcpy without using the C standard library.
+ * Copies 'n' bytes from memory area 'src' to memory area 'dest'.
+ *
+ * @param:   void*          dest,
+ * @param:   const void*    src,
+ * @param:   size_t         n
+ *
+ * @return:  void*          dest
+**/
+__forceinline
+void* vpr_deviate_memcpy( void*         dest,
+                          const void*   src,
+                          size_t        n_bytes )
+{
+    unsigned char* d = (unsigned char *)dest;
+    const unsigned char* s = (const unsigned char *)src;
+    for (size_t i = 0; i < n_bytes; ++i) {
+        d[i] = s[i];
+    }
+
+    return dest;
+}
 
 /**
  * Resolve dynamic address using address and pointer array.
@@ -140,14 +184,17 @@ bool vpr_deviate_patch( void*        destination,
                         const void*  source,
                         const size_t size )
 {
-    DWORD protect;
-    if (!VirtualProtect(destination, size, PAGE_EXECUTE_READWRITE, &protect)) {
+    PVOID base_address = destination;
+    SIZE_T size_ = size;
+    DWORD protect = 0;
+
+    if (fNtProtectVirtualMemory((void *)-1, &base_address, &size_, PAGE_EXECUTE_READWRITE, &protect)) {
         return false;
     }
 
-    memcpy(destination, source, size);
+    vpr_deviate_memcpy(destination, source, size);
 
-    if (!VirtualProtect(destination, size, protect, &protect)) {
+    if (fNtProtectVirtualMemory((void *)-1, &base_address, &size_, protect, &protect)) {
         return false;
     }
 
@@ -171,64 +218,26 @@ uint64_t vpr_deviate_detour( void*        target_func,
                              const size_t original_bytes_size )
 {
     if (original_bytes) {
-        memcpy(original_bytes, target_func, original_bytes_size);
+        vpr_deviate_memcpy(original_bytes, target_func, original_bytes_size);
     }
 
-    DWORD protect;
+    PVOID base_address = target_func;
+    DWORD protect = 0;
+    SIZE_T size = 0;
     uint64_t relative_func = (uintptr_t)detour_func - (uintptr_t)target_func - _rel_jmp_size_;
     if ((relative_func > 0xFFFFFFFFllu)) {
-        VirtualProtect(target_func, sizeof(rax_jmp_data_t), PAGE_EXECUTE_READWRITE, &protect);
+        size = sizeof(rax_jmp_data_t);
+        fNtProtectVirtualMemory((void *)-1, &base_address, &size, PAGE_EXECUTE_READWRITE, &protect);
         set_rax_jmp_data((rax_jmp_data_ptr)target_func, (uintptr_t)detour_func);
-        VirtualProtect(target_func, sizeof(rax_jmp_data_t), protect, &protect);
+        fNtProtectVirtualMemory((void *)-1, &base_address, &size, protect, &protect);
 
         return sizeof(rax_jmp_data_t);
     }
 
-    VirtualProtect(target_func, _rel_jmp_size_, PAGE_EXECUTE_READWRITE, &protect);
+    size = _rel_jmp_size_;
+    fNtProtectVirtualMemory((void *)-1, &base_address, &size, PAGE_EXECUTE_READWRITE, &protect);
     set_rel_jmp_data((rel_jmp_data_ptr)target_func, (int32_t)relative_func);
-    VirtualProtect(target_func, _rel_jmp_size_, protect, &protect);
-
-    return sizeof(rel_jmp_data_t);
-}
-
-/**
- * Detours the target to another function.
- *
- * @param:  void*            target_func,
- * @param:  const void*      detour_func,
- * @param:  void*            original_bytes,
- * @param:  const size_t     original_bytes_size
- *
- * @return: bool            success
-**/
-__forceinline
-uint64_t vpr_deviate_detour_ex( void*            target_func,
-                                const void*      detour_func,
-                                void*            original_bytes,
-                                const size_t     original_bytes_size,
-                                VirtualProtect_t fVirtualProtect )
-{
-    if (!fVirtualProtect) {
-        return 0;
-    }
-
-    if (original_bytes) {
-        for (size_t i = 0; i < original_bytes_size; ++i) ((char *)original_bytes)[i] = ((char *)target_func)[i];
-    }
-
-    DWORD protect;
-    uint64_t relative_func = (uintptr_t)detour_func - (uintptr_t)target_func - _rel_jmp_size_;
-    if ((relative_func > 0xFFFFFFFFllu)) {
-        fVirtualProtect(target_func, sizeof(rax_jmp_data_t), PAGE_EXECUTE_READWRITE, &protect);
-        set_rax_jmp_data((rax_jmp_data_ptr)target_func, (uintptr_t)detour_func);
-        fVirtualProtect(target_func, sizeof(rax_jmp_data_t), protect, &protect);
-
-        return sizeof(rax_jmp_data_t);
-    }
-
-    fVirtualProtect(target_func, _rel_jmp_size_, PAGE_EXECUTE_READWRITE, &protect);
-    set_rel_jmp_data((rel_jmp_data_ptr)target_func, (int32_t)relative_func);
-    fVirtualProtect(target_func, _rel_jmp_size_, protect, &protect);
+    fNtProtectVirtualMemory((void *)-1, &base_address, &size, protect, &protect);
 
     return sizeof(rel_jmp_data_t);
 }
@@ -259,7 +268,7 @@ void* vpr_deviate_trampoline( void*       target_func,
     if (!(gateway = VirtualAlloc(NULL, detour_size + _rel_jmp_size_, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE))) {
         return NULL;
     }
-    memcpy((void *)gateway, (void *)target_func, detour_size);
+    vpr_deviate_memcpy((void *)gateway, (void *)target_func, detour_size);
 
     int32_t relative_addr = (int32_t)((uintptr_t)detour_func - (uintptr_t)target_func - _rel_jmp_size_);
     rel_jmp_data_ptr rel_jmp_data = (rel_jmp_data_ptr)((uintptr_t)gateway + detour_size);
@@ -410,11 +419,6 @@ public:
                                      original_bytes,
                                      original_bytes_size );
     }
-
-    /*__forceinline*/
-    /*uint64_t detour(VirtualProtect_t fVirtualProtect) {*/
-        /*return vpr_deviate_detour_ex(target_func_, detour_func_)*/
-    /*}*/
 
     __forceinline
     bool restore() const {
