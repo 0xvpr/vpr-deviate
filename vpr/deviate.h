@@ -3,7 +3,7 @@
  * Created:         March 28th, 2024
  *
  * Updated by:      VPR (0xvpr)
- * Updated:         April 5th, 2024
+ * Updated:         April 6th, 2024
  *
  * Description:     C99/C++20 Header only library for memory management in Windows.
  *
@@ -26,13 +26,10 @@
 #if        !defined(__cplusplus)
 #include   <stdbool.h>
 #include   <stdint.h>
-#include   <string.h>
 
 #else   // defined(__cplusplus)
-#include   <cstring>
 #include   <cstdint>
 #endif  // defined(__cplusplus)
-#include   <stdio.h>
 
 
 
@@ -41,13 +38,13 @@
 #define             _rel_jmp_size_ ( ((sizeof(uint32_t)+1)) )
 #define             _mov_rax_      ( (((uint16_t)(0x1234)) & 0xFF) == 0x34 ? 0xB848 : 0x48B8 )
 #define             _jmp_rax_      ( (((uint16_t)(0x1234)) & 0xFF) == 0x34 ? 0xE0FF : 0xFFE0 )
-#define             _jmp_rax_size_ ( (sizeof(uint16_t)) )
+/*#define           _jmp_rax_size_ ( (sizeof(uint16_t)) )*/
 #else   // defined(__cplusplus)
 constexpr uint8_t   _rel_jmp_      = (uint8_t)0xE9;
 constexpr uint32_t  _rel_jmp_size_ = ((sizeof(uint32_t)+1));
 constexpr uint16_t  _mov_rax_      = (((uint16_t)(0x1234)) & 0xFF) == 0x34 ? 0xB848 : 0x48B8;
 constexpr uint16_t  _jmp_rax_      = (((uint16_t)(0x1234)) & 0xFF) == 0x34 ? 0xE0FF : 0xFFE0;
-/*constexpr size_t    _jmp_rax_size_ = (sizeof(uint16_t));*/
+/*constexpr size_t  _jmp_rax_size_ = (sizeof(uint16_t));*/
 #endif  // defined(__cplusplus)
 
 
@@ -89,7 +86,44 @@ void set_rel_jmp_data(rel_jmp_data_ptr rel_jmp_data, int32_t address) {
     rel_jmp_data->address = address;
 }
 
+#if        !defined(__cplusplus)
+/**
+ * Direct Syscall of NtProtectVirtualMemory.
+ *
+ * @param:   HANDLE         process_handle,
+ * @param:   PVOID*         base_address,
+ * @param:   PSIZE_T        size_ptr,
+ * @param:   DWORD          protect,
+ * @param:   PDWORD         old_protect
+ *
+ * @return: uintptr_t       resolved_address
+**/
+NTSTATUS fNtProtectVirtualMemory( /* HANDLE  process_handle, */
+                                  /* PVOID*  base_address,   */
+                                  /* PSIZE_T size_ptr,       */
+                                  /* DWORD   protect,        */
+                                  /* PDWORD  old_protect     */
+);
+#endif  // !defined(__cplusplus)
 
+#if        !defined(__cplusplus)
+#ifndef VPR_DEVIATE_GLOBAL_C_INIT
+#define VPR_DEVIATE_GLOBAL_C_INIT() \
+NTSTATUS __declspec(naked) fNtProtectVirtualMemory( /* HANDLE  process_handle, */   \
+                                                    /* PVOID*  base_address,   */   \
+                                                    /* PSIZE_T size_ptr,       */   \
+                                                    /* DWORD   protect,        */   \
+                                                    /* PDWORD  old_protect     */ ) \
+{ \
+    __asm__ __volatile__( \
+        ".byte 0x49, 0x89, 0xCA\n\t"              /* mov r10, rcx  */ \
+        ".byte 0xB8, 0x50, 0x00, 0x00, 0x00\n\t"  /* mov eax, 0x50 */ \
+        ".byte 0x0F, 0x05\n\t"                    /* syscall       */ \
+        ".byte 0xC3"                              /* ret           */ \
+    ); \
+}
+#endif
+#else // defined(__cplusplus
 /**
  * Direct Syscall of NtProtectVirtualMemory.
  *
@@ -107,17 +141,17 @@ NTSTATUS __declspec(naked) fNtProtectVirtualMemory( /* HANDLE  process_handle, *
                                                     /* PSIZE_T size_ptr,       */
                                                     /* DWORD   protect,        */
                                                     /* PDWORD  old_protect     */
-#if defined(__cplusplus)
                                                     ... // set variable args for C++ implementations
-#endif
 ) {
     __asm__ __volatile__(
-        ".byte 0x49, 0x89, 0xCA\n\t"              // mov r10, rcx
-        ".byte 0xB8, 0x50, 0x00, 0x00, 0x00\n\t"  // mov eax, 0x50
-        ".byte 0x0F, 0x05\n\t"                    // syscall
-        ".byte 0xC3"                              // ret
+        ".byte 0x49, 0x89, 0xCA\n\t"              /* mov r10, rcx  */
+        ".byte 0xB8, 0x50, 0x00, 0x00, 0x00\n\t"  /* mov eax, 0x50 */
+        ".byte 0x0F, 0x05\n\t"                    /* syscall       */
+        ".byte 0xC3"                              /* ret           */
     );
 }
+#endif
+
 
 /**
  * Custom implementation of memcpy without using the C standard library.
