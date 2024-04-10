@@ -71,7 +71,9 @@ typedef struct __attribute__((packed)) _rel_jmp_data {
     int32_t     address     : 32;
 } rel_jmp_data_t, *rel_jmp_data_ptr;
 
-
+typedef struct _original_data {
+    char bytes[2 * sizeof(rax_jmp_data_t)];
+} original_data, *original_data_ptr;
 
 __forceinline
 void set_rax_jmp_data(rax_jmp_data_ptr jmp_data, uint64_t address) {
@@ -293,29 +295,29 @@ uint64_t vpr_deviate_detour( void*        target_func,
 __forceinline
 void* vpr_deviate_trampoline( void*       target_func,
                               const void* detour_func,
-                              size_t      detour_size,
                               void*       original_bytes,
                               size_t      original_bytes_size )
 {
-    if (detour_size < _rel_jmp_size_) {
+    if (original_bytes) {
+        vpr_deviate_memcpy(original_bytes, target_func, original_bytes_size);
+    }
+
+    void* gateway = nullptr;
+    if (!(gateway = VirtualAlloc(NULL, (2 * sizeof(rax_jmp_data_t)), MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE))) {
         return NULL;
     }
+    vpr_deviate_memcpy(gateway, target_func, sizeof(rax_jmp_data_t));
+    set_rax_jmp_data((rax_jmp_data_ptr)((uintptr_t)gateway+sizeof(rax_jmp_data_t)), (uint64_t)(target_func)+sizeof(rax_jmp_data_t));
 
-    void* gateway;
-    if (!(gateway = VirtualAlloc(NULL, detour_size + _rel_jmp_size_, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE))) {
-        return NULL;
-    }
-    vpr_deviate_memcpy((void *)gateway, (void *)target_func, detour_size);
+    PVOID base_address = target_func;
+    SIZE_T size_ = 2 * sizeof(rax_jmp_data_t);
+    DWORD protect = 0;
 
-    int32_t relative_addr = (int32_t)((uintptr_t)detour_func - (uintptr_t)target_func - _rel_jmp_size_);
-    rel_jmp_data_ptr rel_jmp_data = (rel_jmp_data_ptr)((uintptr_t)gateway + detour_size);
-    set_rel_jmp_data(rel_jmp_data, relative_addr);
+    fNtProtectVirtualMemory((void *)-1, &base_address, &size_, PAGE_EXECUTE_READWRITE, &protect);
+    set_rax_jmp_data((rax_jmp_data_ptr)(target_func), (uint64_t)detour_func);
+    fNtProtectVirtualMemory((void *)-1, &base_address, &size_, protect, &protect);
 
-    if (vpr_deviate_detour(target_func, detour_func, original_bytes, original_bytes_size)) {
-        return gateway;
-    }
-
-    return NULL;
+    return gateway;
 }
 
 
@@ -402,13 +404,11 @@ uint64_t detour( auto&&       target_func,
 __forceinline
 void* trampoline( auto&&       target_func,
                   auto&&       detour_func,
-                  const size_t detour_size,
                   auto&&       original_bytes = nullptr,
                   const size_t original_bytes_size = _rel_jmp_size_ )
 {
     return vpr_deviate_trampoline( (void *)+target_func,
                                    (const void *)+detour_func,
-                                   detour_size,
                                    original_bytes,
                                    original_bytes_size );
 
@@ -419,6 +419,11 @@ void* trampoline( auto&&       target_func,
 ////////////////////////////////////////////////////////////////////////////////
 
 class [[nodiscard]] interceptor {
+    enum hook_type : int16_t {
+        unhooked = -1,
+        detour_t = 0,
+        tramp_t  = 1
+    };
 public:
     interceptor() = delete;
     interceptor(const interceptor &) = delete;
@@ -431,65 +436,106 @@ public:
                                     auto&& detour_func )
     : target_func_((uintptr_t)+target_func)
     , detour_func_((uintptr_t)+detour_func)
-    , original_data_(*((original_data_ptr)(target_func_)))
+    , original_data_( *((original_data_ptr)target_func) )
+    , hook_(hook_type::unhooked)
     {
     }
 
     __forceinline
-    uint64_t relative_addr() const {
+    constexpr uint64_t relative_addr() const {
         return detour_func_ - target_func_ - _rel_jmp_size_;
     }
 
     __forceinline
     uint64_t detour() const {
-        return vpr::deviate::detour( target_func_,
+        uint64_t address = vpr::deviate::detour( target_func_,
                                      detour_func_,
                                      nullptr );
+
+        if (address) {
+            hook_ = hook_type::detour_t;
+        }
+
+        return address;
     }
 
     __forceinline
     uint64_t detour( auto&&       original_bytes = nullptr,
                      const size_t original_bytes_size = _rel_jmp_size_ ) const
     {
-        return vpr::deviate::detour( target_func_,
-                                     detour_func_,
-                                     original_bytes,
-                                     original_bytes_size );
+        uint64_t address = vpr::deviate::detour( target_func_,
+                                                 detour_func_,
+                                                 original_bytes,
+                                                 original_bytes_size );
+
+        if (address) {
+            hook_ = hook_type::detour_t;
+        }
+
+        return address;
     }
 
     __forceinline
     bool restore() const {
-        return vpr::deviate::patch( target_func_,
-                                    &original_data_,
-                                    relative_addr() < 0x100000000 ?
-                                        sizeof(rel_jmp_data_t)    :
-                                        sizeof(rax_jmp_data_t));
+        if (hook_ == -1) {
+            return false;
+        }
+
+        bool success = vpr::deviate::patch( target_func_,
+                                            &original_data_,
+                                            hook_ == hook_type::detour_t ?         // detour_t
+                                                ( relative_addr() < 0x100000000 ?
+                                                    sizeof(rel_jmp_data_t)    :
+                                                    sizeof(rax_jmp_data_t) )
+                                                : 2 * sizeof(rax_jmp_data_t) );    // tramp_t
+
+        if (success) {
+            hook_ = hook_type::unhooked;
+            return true;
+        }
+
+        return false;
     }
 
     __forceinline
-    uintptr_t trampoline(
-                  const size_t detour_size,
-                  auto&&       original_bytes = nullptr,
-                  const size_t original_bytes_size = _rel_jmp_size_ ) const
+    void* trampoline() const {
+        void* gateway =  vpr::deviate::trampoline( target_func_,
+                                                   detour_func_,
+                                                   nullptr,
+                                                   2 * sizeof(rax_jmp_data_t) );
+
+        if (gateway) {
+            hook_ = hook_type::tramp_t;
+        }
+        
+        return gateway;
+    }
+
+    __forceinline
+    void* trampoline( auto&&       original_bytes = nullptr,
+                      const size_t original_bytes_size = _rel_jmp_size_ ) const
     {
-        return vpr::deviate::trampoline( target_func_,
-                                         detour_func_,
-                                         detour_size,
-                                         original_bytes,
-                                         original_bytes_size );
+        void* gateway = vpr::deviate::trampoline( target_func_,
+                                                  detour_func_,
+                                                  original_bytes,
+                                                  original_bytes_size );
+
+        if (gateway) {
+            hook_ = hook_type::tramp_t;
+        }
+        
+        return gateway;
     }
 
 private:
     typedef struct {
-        union {
-            rax_jmp_data_t rax_jmp_data_;
-            rel_jmp_data_t rel_jmp_data_;
-        };
+        unsigned char bytes[64];
     } original_data, *original_data_ptr;
 
     uintptr_t           target_func_;
     uintptr_t           detour_func_;
     const original_data original_data_;
+    mutable hook_type   hook_;
 }; // class interceptor
 
 } // namespace memory
