@@ -4,6 +4,8 @@
 
 unsigned char original_bytes[_rel_jmp_size_];
 
+void* foo_gateway = nullptr;
+
 void foo(int x) {
     fprintf(stdout, "%d\n", x);
 }
@@ -20,6 +22,13 @@ void bar(int x) {
 
     ((decltype(&foo))jump_back)(x);
     VirtualFree(jump_back, size, MEM_RELEASE | MEM_FREE);
+}
+
+void tramp(int x)
+{
+    fprintf(stdout, "trampoline %d ", x*2);
+
+    return ((decltype(&foo))foo_gateway)(x);
 }
 
 int main() {
@@ -52,6 +61,14 @@ int main() {
     foo(5);
 
     interceptor.restore();
+    foo(5);
+
+    auto interceptor2 = vpr::deviate::interceptor( foo,
+                                                   tramp );
+    foo_gateway = interceptor2.trampoline();
+    foo(5);
+
+    interceptor2.restore();
     foo(5);
 
     return 0;
