@@ -3,7 +3,7 @@
  * Created:         March 28th, 2024
  *
  * Updated by:      VPR (0xvpr)
- * Updated:         April 6th, 2024
+ * Updated:         April 10th, 2024
  *
  * Description:     C99/C++20 Header only library for memory management in Windows.
  *
@@ -71,10 +71,6 @@ typedef struct __attribute__((packed)) _rel_jmp_data {
     int32_t     address     : 32;
 } rel_jmp_data_t, *rel_jmp_data_ptr;
 
-typedef struct _original_data {
-    char bytes[2 * sizeof(rax_jmp_data_t)];
-} original_data, *original_data_ptr;
-
 __forceinline
 void set_rax_jmp_data(rax_jmp_data_ptr jmp_data, uint64_t address) {
     jmp_data->mov_rax = _mov_rax_;
@@ -90,6 +86,44 @@ void set_rel_jmp_data(rel_jmp_data_ptr rel_jmp_data, int32_t address) {
 
 #if        !defined(__cplusplus)
 /**
+ * Direct Syscall of NtAllocateVirtualMemory.
+ *
+ * @param:   HANDLE         process_handle,
+ * @param:   PVOID*         base_address,
+ * @param:   ULONG_PTR      zero_bits,
+ * @param:   PSIZE_T        size_ptr,
+ * @param:   ULONG          alloc,
+ * @param:   ULONG          protect
+ *
+ * @return:  NTSTATUS       success
+**/
+NTSTATUS fNtAllocateVirtualMemory( /* HANDLE  process_handle, */
+                                   /* PVOID*  base_address,   */
+                                   /* ULONG_PTR zero_bits     */
+                                   /* PSIZE_T size_ptr,       */
+                                   /* ULONG   alloc,          */
+                                   /* ULONG   protect         */
+);
+
+/**
+ * Direct Syscall of NtFreeVirtualMemory.
+ *
+ * @param:   HANDLE         process_handle,
+ * @param:   PVOID*         base_address,
+ * @param:   ULONG_PTR      zero_bits,
+ * @param:   PSIZE_T        size_ptr,
+ * @param:   ULONG          alloc,
+ * @param:   ULONG          protect
+ *
+ * @return:  NTSTATUS       success
+**/
+NTSTATUS __declspec(naked) fNtFreeVirtualMemory( /* HANDLE    process_handle, */
+                                                 /* PVOID*    base_address,   */
+                                                 /* PSIZE_T   size_ptr,       */
+                                                 /* ULONG     free            */
+);
+
+/**
  * Direct Syscall of NtProtectVirtualMemory.
  *
  * @param:   HANDLE         process_handle,
@@ -98,7 +132,7 @@ void set_rel_jmp_data(rel_jmp_data_ptr rel_jmp_data, int32_t address) {
  * @param:   DWORD          protect,
  * @param:   PDWORD         old_protect
  *
- * @return: uintptr_t       resolved_address
+ * @return:  NTSTATUS       status
 **/
 NTSTATUS fNtProtectVirtualMemory( /* HANDLE  process_handle, */
                                   /* PVOID*  base_address,   */
@@ -110,22 +144,102 @@ NTSTATUS fNtProtectVirtualMemory( /* HANDLE  process_handle, */
 
 #if        !defined(__cplusplus)
 #ifndef VPR_DEVIATE_GLOBAL_C_INIT
-#define VPR_DEVIATE_GLOBAL_C_INIT() \
-NTSTATUS __declspec(naked) fNtProtectVirtualMemory( /* HANDLE  process_handle, */   \
-                                                    /* PVOID*  base_address,   */   \
-                                                    /* PSIZE_T size_ptr,       */   \
-                                                    /* DWORD   protect,        */   \
-                                                    /* PDWORD  old_protect     */ ) \
-{ \
-    __asm__ __volatile__( \
-        ".byte 0x49, 0x89, 0xCA\n\t"              /* mov r10, rcx  */ \
-        ".byte 0xB8, 0x50, 0x00, 0x00, 0x00\n\t"  /* mov eax, 0x50 */ \
-        ".byte 0x0F, 0x05\n\t"                    /* syscall       */ \
-        ".byte 0xC3"                              /* ret           */ \
-    ); \
+#define VPR_DEVIATE_GLOBAL_C_INIT()                                                  \
+NTSTATUS __declspec(naked) fNtAllocateVirtualMemory( /* HANDLE  process_handle, */   \
+                                                     /* PVOID*  base_address,   */   \
+                                                     /* PSIZE_T size_ptr,       */   \
+                                                     /* DWORD   protect,        */   \
+                                                     /* PDWORD  old_protect     */ ) \
+{                                                                                    \
+    __asm__ __volatile__(                                                            \
+        ".byte 0x49, 0x89, 0xCA\n\t"              /* mov r10, rcx  */                \
+        ".byte 0xB8, 0x18, 0x00, 0x00, 0x00\n\t"  /* mov eax, 0x18 */                \
+        ".byte 0x0F, 0x05\n\t"                    /* syscall       */                \
+        ".byte 0xC3"                              /* ret           */                \
+    );                                                                               \
+}                                                                                    \
+NTSTATUS __declspec(naked) fNtFreeVirtualMemory( /* HANDLE  process_handle, */       \
+                                                 /* PVOID*  base_address,   */       \
+                                                 /* PSIZE_T size_ptr,       */       \
+                                                 /* DWORD   protect,        */       \
+                                                 /* PDWORD  old_protect     */ )     \
+{                                                                                    \
+    __asm__ __volatile__(                                                            \
+        ".byte 0x49, 0x89, 0xCA\n\t"              /* mov r10, rcx  */                \
+        ".byte 0xB8, 0x1E, 0x00, 0x00, 0x00\n\t"  /* mov eax, 0x1E */                \
+        ".byte 0x0F, 0x05\n\t"                    /* syscall       */                \
+        ".byte 0xC3"                              /* ret           */                \
+    );                                                                               \
+}                                                                                    \
+NTSTATUS __declspec(naked) fNtProtectVirtualMemory( /* HANDLE  process_handle, */    \
+                                                    /* PVOID*  base_address,   */    \
+                                                    /* PSIZE_T size_ptr,       */    \
+                                                    /* DWORD   protect,        */    \
+                                                    /* PDWORD  old_protect     */ )  \
+{                                                                                    \
+    __asm__ __volatile__(                                                            \
+        ".byte 0x49, 0x89, 0xCA\n\t"              /* mov r10, rcx  */                \
+        ".byte 0xB8, 0x50, 0x00, 0x00, 0x00\n\t"  /* mov eax, 0x50 */                \
+        ".byte 0x0F, 0x05\n\t"                    /* syscall       */                \
+        ".byte 0xC3"                              /* ret           */                \
+    );                                                                               \
 }
 #endif
 #else // defined(__cplusplus
+/**
+ * Direct Syscall of NtAllocateVirtualMemory.
+ *
+ * @param:   HANDLE         process_handle,
+ * @param:   PVOID*         base_address,
+ * @param:   ULONG_PTR      zero_bits,
+ * @param:   PSIZE_T        size_ptr,
+ * @param:   ULONG          alloc,
+ * @param:   ULONG          protect
+ *
+ * @return:  NTSTATUS       status
+**/
+inline
+NTSTATUS __declspec(naked) fNtAllocateVirtualMemory( /* HANDLE    process_handle, */
+                                                     /* PVOID*    base_address,   */
+                                                     /* ULONG_PTR zero_bits,      */
+                                                     /* PSIZE_T   size_ptr,       */
+                                                     /* ULONG     alloc,          */
+                                                     /* ULONG     protect         */
+                                                     ... // set variable args for C++ implementations
+) {
+    __asm__ __volatile__(
+        ".byte 0x49, 0x89, 0xCA\n\t"              /* mov r10, rcx  */
+        ".byte 0xB8, 0x18, 0x00, 0x00, 0x00\n\t"  /* mov eax, 0x18 */
+        ".byte 0x0F, 0x05\n\t"                    /* syscall       */
+        ".byte 0xC3"                              /* ret           */
+    );
+}
+
+/**
+ * Direct Syscall of NtAllocateVirtualMemory.
+ *
+ * @param:   HANDLE         process_handle,
+ * @param:   PVOID*         base_address,
+ * @param:   PSIZE_T        size_ptr,
+ * @param:   ULONG          free
+ *
+ * @return:  NTSTATUS       status
+**/
+inline
+NTSTATUS __declspec(naked) fNtFreeVirtualMemory( /* HANDLE    process_handle, */
+                                                 /* PVOID*    base_address,   */
+                                                 /* PSIZE_T   size_ptr,       */
+                                                 /* ULONG     free            */
+                                                 ... // set variable args for C++ implementations
+) {
+    __asm__ __volatile__(
+        ".byte 0x49, 0x89, 0xCA\n\t"              /* mov r10, rcx  */
+        ".byte 0xB8, 0x1E, 0x00, 0x00, 0x00\n\t"  /* mov eax, 0x1E */
+        ".byte 0x0F, 0x05\n\t"                    /* syscall       */
+        ".byte 0xC3"                              /* ret           */
+    );
+}
+
 /**
  * Direct Syscall of NtProtectVirtualMemory.
  *
@@ -135,7 +249,7 @@ NTSTATUS __declspec(naked) fNtProtectVirtualMemory( /* HANDLE  process_handle, *
  * @param:   DWORD          protect,
  * @param:   PDWORD         old_protect
  *
- * @return: uintptr_t       resolved_address
+ * @return: NTSTATUS        status
 **/
 inline
 NTSTATUS __declspec(naked) fNtProtectVirtualMemory( /* HANDLE  process_handle, */
@@ -303,19 +417,19 @@ void* vpr_deviate_trampoline( void*       target_func,
     }
 
     void* gateway = nullptr;
-    if (!(gateway = VirtualAlloc(NULL, (2 * sizeof(rax_jmp_data_t)), MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE))) {
+    SIZE_T size = 2 * sizeof(rax_jmp_data_t);
+    if (fNtAllocateVirtualMemory((void *)-1, &gateway, 0, &size, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE)) {
         return NULL;
     }
     vpr_deviate_memcpy(gateway, target_func, sizeof(rax_jmp_data_t));
     set_rax_jmp_data((rax_jmp_data_ptr)((uintptr_t)gateway+sizeof(rax_jmp_data_t)), (uint64_t)(target_func)+sizeof(rax_jmp_data_t));
 
     PVOID base_address = target_func;
-    SIZE_T size_ = 2 * sizeof(rax_jmp_data_t);
     DWORD protect = 0;
 
-    fNtProtectVirtualMemory((void *)-1, &base_address, &size_, PAGE_EXECUTE_READWRITE, &protect);
+    fNtProtectVirtualMemory((void *)-1, &base_address, &size, PAGE_EXECUTE_READWRITE, &protect);
     set_rax_jmp_data((rax_jmp_data_ptr)(target_func), (uint64_t)detour_func);
-    fNtProtectVirtualMemory((void *)-1, &base_address, &size_, protect, &protect);
+    fNtProtectVirtualMemory((void *)-1, &base_address, &size, protect, &protect);
 
     return gateway;
 }
@@ -438,6 +552,8 @@ public:
     , detour_func_((uintptr_t)+detour_func)
     , original_data_( *((original_data_ptr)target_func) )
     , hook_(hook_type::unhooked)
+    , gateway_(nullptr)
+    , size_(2 * sizeof(rax_jmp_data_t) )
     {
     }
 
@@ -477,17 +593,22 @@ public:
 
     __forceinline
     bool restore() const {
-        if (hook_ == -1) {
+        if (hook_ == hook_type::unhooked) {
             return false;
+        }
+
+        if (hook_ == hook_type::tramp_t && gateway_) {
+            fNtFreeVirtualMemory((void *)-1, &gateway_, &size_, MEM_FREE | MEM_RELEASE);
         }
 
         bool success = vpr::deviate::patch( target_func_,
                                             &original_data_,
                                             hook_ == hook_type::detour_t ?         // detour_t
-                                                ( relative_addr() < 0x100000000 ?
-                                                    sizeof(rel_jmp_data_t)    :
-                                                    sizeof(rax_jmp_data_t) )
+                                                ( relative_addr() < 0x100000000 ?  // |
+                                                    sizeof(rel_jmp_data_t) :       //  -> relative jmp
+                                                    sizeof(rax_jmp_data_t) )       //  -> rax jmp
                                                 : 2 * sizeof(rax_jmp_data_t) );    // tramp_t
+
 
         if (success) {
             hook_ = hook_type::unhooked;
@@ -536,6 +657,8 @@ private:
     uintptr_t           detour_func_;
     const original_data original_data_;
     mutable hook_type   hook_;
+    void*               gateway_;
+    std::size_t         size_;
 }; // class interceptor
 
 } // namespace memory
