@@ -416,8 +416,8 @@ void* vpr_deviate_trampoline( void*       target_func,
         vpr_deviate_memcpy(original_bytes, target_func, original_bytes_size);
     }
 
-    void* gateway = nullptr;
-    SIZE_T size = 2 * sizeof(rax_jmp_data_t);
+    void* gateway = NULL;
+    SIZE_T size = (2 * sizeof(rax_jmp_data_t));
     if (fNtAllocateVirtualMemory((void *)-1, &gateway, 0, &size, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE)) {
         return NULL;
     }
