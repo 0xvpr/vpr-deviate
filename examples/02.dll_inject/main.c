@@ -9,6 +9,7 @@ __declspec(dllexport) void foo(void)
 
 int main(void)
 {
+    fprintf(stdout, "Press [return] to alternate between 69 and 420 endlessly.\n", x);
     while (1) {
         foo();
         getchar();
