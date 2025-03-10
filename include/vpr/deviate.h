@@ -3,9 +3,9 @@
  * Created:         March 28th, 2024
  *
  * Updated by:      VPR (0xvpr)
- * Updated:         March 9th, 2025
+ * Updated:         April 10th, 2024
  *
- * Description:     C99 Header only library for memory management in Windows.
+ * Description:     C99/C++20 Header only library for memory management in Windows.
  *
  * License:         MIT (c) VPR 2024
 **/
@@ -14,9 +14,7 @@
 #ifndef    VPR_DEVIATE_HEADER
 #define    VPR_DEVIATE_HEADER
 
-#ifndef __cplusplus
-#error "C Only header. Use deviate.hpp instead."
-#endif
+
 
 #ifndef    VC_EXTRA_LEAN
 #define    VC_EXTRA_LEAN
@@ -25,17 +23,29 @@
 
 
 
+#if        !defined(__cplusplus)
 #include   <stdbool.h>
 #include   <stdint.h>
 
+#else   // defined(__cplusplus)
+#include   <cstdint>
+#endif  // defined(__cplusplus)
 
 
+
+#if        !defined(__cplusplus)
 #define             _rel_jmp_      ( ((uint8_t)0xE9) )
 #define             _rel_jmp_size_ ( ((sizeof(uint32_t)+1)) )
 #define             _mov_rax_      ( (((uint16_t)(0x1234)) & 0xFF) == 0x34 ? 0xB848 : 0x48B8 )
 #define             _jmp_rax_      ( (((uint16_t)(0x1234)) & 0xFF) == 0x34 ? 0xE0FF : 0xFFE0 )
-/*#define           _jmp_eax_      ( (sizeof(uint16_t)) )*/
-/*#define           _jmp_eax_size_ ( (sizeof(uint16_t)) )*/
+/*#define           _jmp_rax_size_ ( (sizeof(uint16_t)) )*/
+#else   // defined(__cplusplus)
+constexpr uint8_t   _rel_jmp_      = (uint8_t)0xE9;
+constexpr uint32_t  _rel_jmp_size_ = ((sizeof(uint32_t)+1));
+constexpr uint16_t  _mov_rax_      = (((uint16_t)(0x1234)) & 0xFF) == 0x34 ? 0xB848 : 0x48B8;
+constexpr uint16_t  _jmp_rax_      = (((uint16_t)(0x1234)) & 0xFF) == 0x34 ? 0xE0FF : 0xFFE0;
+/*constexpr size_t  _jmp_rax_size_ = (sizeof(uint16_t));*/
+#endif  // defined(__cplusplus)
 
 
 
@@ -74,62 +84,65 @@ void set_rel_jmp_data(rel_jmp_data_ptr rel_jmp_data, int32_t address) {
     rel_jmp_data->address = address;
 }
 
-////**
-// * Direct Syscall of NtAllocateVirtualMemory.
-// *
-// * @param:   HANDLE         process_handle,
-// * @param:   PVOID*         base_address,
-// * @param:   ULONG_PTR      zero_bits,
-// * @param:   PSIZE_T        size_ptr,
-// * @param:   ULONG          alloc,
-// * @param:   ULONG          protect
-// *
-// * @return:  NTSTATUS       success
-//**/
-//NTSTATUS fNtAllocateVirtualMemory( /* HANDLE  process_handle, */
-//                                   /* PVOID*  base_address,   */
-//                                   /* ULONG_PTR zero_bits     */
-//                                   /* PSIZE_T size_ptr,       */
-//                                   /* ULONG   alloc,          */
-//                                   /* ULONG   protect         */
-//);
-//
-///**
-// * Direct Syscall of NtFreeVirtualMemory.
-// *
-// * @param:   HANDLE         process_handle,
-// * @param:   PVOID*         base_address,
-// * @param:   ULONG_PTR      zero_bits,
-// * @param:   PSIZE_T        size_ptr,
-// * @param:   ULONG          alloc,
-// * @param:   ULONG          protect
-// *
-// * @return:  NTSTATUS       success
-//**/
-//NTSTATUS __declspec(naked) fNtFreeVirtualMemory( /* HANDLE    process_handle, */
-//                                                 /* PVOID*    base_address,   */
-//                                                 /* PSIZE_T   size_ptr,       */
-//                                                 /* ULONG     free            */
-//);
-//
-///**
-// * Direct Syscall of NtProtectVirtualMemory.
-// *
-// * @param:   HANDLE         process_handle,
-// * @param:   PVOID*         base_address,
-// * @param:   PSIZE_T        size_ptr,
-// * @param:   DWORD          protect,
-// * @param:   PDWORD         old_protect
-// *
-// * @return:  NTSTATUS       status
-//**/
-//NTSTATUS fNtProtectVirtualMemory( /* HANDLE  process_handle, */
-//                                  /* PVOID*  base_address,   */
-//                                  /* PSIZE_T size_ptr,       */
-//                                  /* DWORD   protect,        */
-//                                  /* PDWORD  old_protect     */
-//);
+#if        !defined(__cplusplus)
+/**
+ * Direct Syscall of NtAllocateVirtualMemory.
+ *
+ * @param:   HANDLE         process_handle,
+ * @param:   PVOID*         base_address,
+ * @param:   ULONG_PTR      zero_bits,
+ * @param:   PSIZE_T        size_ptr,
+ * @param:   ULONG          alloc,
+ * @param:   ULONG          protect
+ *
+ * @return:  NTSTATUS       success
+**/
+NTSTATUS fNtAllocateVirtualMemory( /* HANDLE  process_handle, */
+                                   /* PVOID*  base_address,   */
+                                   /* ULONG_PTR zero_bits     */
+                                   /* PSIZE_T size_ptr,       */
+                                   /* ULONG   alloc,          */
+                                   /* ULONG   protect         */
+);
 
+/**
+ * Direct Syscall of NtFreeVirtualMemory.
+ *
+ * @param:   HANDLE         process_handle,
+ * @param:   PVOID*         base_address,
+ * @param:   ULONG_PTR      zero_bits,
+ * @param:   PSIZE_T        size_ptr,
+ * @param:   ULONG          alloc,
+ * @param:   ULONG          protect
+ *
+ * @return:  NTSTATUS       success
+**/
+NTSTATUS __declspec(naked) fNtFreeVirtualMemory( /* HANDLE    process_handle, */
+                                                 /* PVOID*    base_address,   */
+                                                 /* PSIZE_T   size_ptr,       */
+                                                 /* ULONG     free            */
+);
+
+/**
+ * Direct Syscall of NtProtectVirtualMemory.
+ *
+ * @param:   HANDLE         process_handle,
+ * @param:   PVOID*         base_address,
+ * @param:   PSIZE_T        size_ptr,
+ * @param:   DWORD          protect,
+ * @param:   PDWORD         old_protect
+ *
+ * @return:  NTSTATUS       status
+**/
+NTSTATUS fNtProtectVirtualMemory( /* HANDLE  process_handle, */
+                                  /* PVOID*  base_address,   */
+                                  /* PSIZE_T size_ptr,       */
+                                  /* DWORD   protect,        */
+                                  /* PDWORD  old_protect     */
+);
+#endif  // !defined(__cplusplus)
+
+#if        !defined(__cplusplus)
 #ifndef VPR_DEVIATE_GLOBAL_C_INIT
 #define VPR_DEVIATE_GLOBAL_C_INIT()                                                  \
 NTSTATUS __declspec(naked) fNtAllocateVirtualMemory( /* HANDLE  process_handle, */   \
@@ -171,7 +184,8 @@ NTSTATUS __declspec(naked) fNtProtectVirtualMemory( /* HANDLE  process_handle, *
         ".byte 0xC3"                              /* ret           */                \
     );                                                                               \
 }
-
+#endif
+#else // defined(__cplusplus
 /**
  * Direct Syscall of NtAllocateVirtualMemory.
  *
@@ -419,6 +433,237 @@ void* vpr_deviate_trampoline( void*       target_func,
 
     return gateway;
 }
+
+
+////////////////////////////////////////////////////////////////////////////////
+//                                C++ API
+////////////////////////////////////////////////////////////////////////////////
+
+
+#if        defined(__cplusplus)
+namespace vpr {
+namespace deviate {
+
+/**
+ * Resolve dynamic address using address and pointer array.
+ *
+ * @param:  uintptr_t       address
+ * @param:  const uint16_t* offsets
+ * @param:  const size_t    n_memb
+ *
+ * @return: uintptr_t       resolved_address
+**/
+__forceinline
+uintptr_t resolve_dynamic_address( uintptr_t       address,
+                                   const uint16_t* offsets,
+                                   const size_t    n_memb )
+{ 
+    return vpr_deviate_resolve_dynamic_address( address,
+                                                offsets,
+                                                n_memb );
+}
+
+/**
+ * Replace executable of destination from the source.
+ *
+ * @param:  auto&&          destination
+ * @param:  auto&&          source
+ * @param:  const size_t    n_bytes
+ *
+ * @return: bool            success
+**/
+__forceinline
+bool patch( auto&&       destination,
+            auto&&       source,
+            const size_t size )
+{
+    return vpr_deviate_patch( (void *)+destination,
+                              (const void *)+source,
+                              size );
+}
+
+/**
+ * Detours the target to another function.
+ *
+ * @param:  auto&&          target_func
+ * @param:  auto&&          detour_func
+ * @param:  auto&&          original_bytes
+ * @param:  const size_t    original_bytes_size
+ *
+ * @return: uint64_t         success
+**/
+__forceinline
+uint64_t detour( auto&&       target_func,
+                 auto&&       detour_func,
+                 auto&&       original_bytes = nullptr,
+                 const size_t original_bytes_size = _rel_jmp_size_ )
+{
+    return vpr_deviate_detour( (void *)+target_func,
+                               (const void *)+detour_func,
+                               original_bytes,
+                               original_bytes_size );
+}
+
+/**
+ * Detours the target to another function then returns a gateway address to the original target.
+ *
+ * @param:  auto&&          target_func
+ * @param:  auto&&          detour_func
+ * @param:  size_t          detour_size
+ * @param:  auto&&          original_bytes
+ * @param:  size_t          original_bytes_size
+ *
+ * @return: void*           gateway_address (needs to be freed via VirtualFree by the caller when non-zero)
+**/
+__forceinline
+void* trampoline( auto&&       target_func,
+                  auto&&       detour_func,
+                  auto&&       original_bytes = nullptr,
+                  const size_t original_bytes_size = _rel_jmp_size_ )
+{
+    return vpr_deviate_trampoline( (void *)+target_func,
+                                   (const void *)+detour_func,
+                                   original_bytes,
+                                   original_bytes_size );
+
+}
+
+////////////////////////////////////////////////////////////////////////////////
+//                               Hook Manager
+////////////////////////////////////////////////////////////////////////////////
+
+class [[nodiscard]] interceptor {
+    enum hook_type : int16_t {
+        unhooked = -1,
+        detour_t = 0,
+        tramp_t  = 1
+    };
+public:
+    interceptor() = delete;
+    interceptor(const interceptor &) = delete;
+    interceptor& operator = (const interceptor &) = delete;
+    interceptor(interceptor&&) = delete;
+    interceptor& operator = (interceptor &&) = delete;
+
+    __forceinline
+    explicit constexpr interceptor( auto&& target_func,
+                                    auto&& detour_func )
+    : target_func_((uintptr_t)+target_func)
+    , detour_func_((uintptr_t)+detour_func)
+    , original_data_( *((original_data_ptr)target_func) )
+    , hook_(hook_type::unhooked)
+    , gateway_(nullptr)
+    , size_(2 * sizeof(rax_jmp_data_t) )
+    {
+    }
+
+    __forceinline
+    constexpr uint64_t relative_addr() const {
+        return detour_func_ - target_func_ - _rel_jmp_size_;
+    }
+
+    __forceinline
+    uint64_t detour() const {
+        uint64_t address = vpr::deviate::detour( target_func_,
+                                     detour_func_,
+                                     nullptr );
+
+        if (address) {
+            hook_ = hook_type::detour_t;
+        }
+
+        return address;
+    }
+
+    __forceinline
+    uint64_t detour( auto&&       original_bytes = nullptr,
+                     const size_t original_bytes_size = _rel_jmp_size_ ) const
+    {
+        uint64_t address = vpr::deviate::detour( target_func_,
+                                                 detour_func_,
+                                                 original_bytes,
+                                                 original_bytes_size );
+
+        if (address) {
+            hook_ = hook_type::detour_t;
+        }
+
+        return address;
+    }
+
+    __forceinline
+    bool restore() const {
+        if (hook_ == hook_type::unhooked) {
+            return false;
+        }
+
+        if (hook_ == hook_type::tramp_t && gateway_) {
+            fNtFreeVirtualMemory((void *)-1, &gateway_, &size_, MEM_FREE | MEM_RELEASE);
+        }
+
+        bool success = vpr::deviate::patch( target_func_,
+                                            &original_data_,
+                                            hook_ == hook_type::detour_t ?         // detour_t
+                                                ( relative_addr() < 0x100000000 ?  // |
+                                                    sizeof(rel_jmp_data_t) :       //  -> relative jmp
+                                                    sizeof(rax_jmp_data_t) )       //  -> rax jmp
+                                                : 2 * sizeof(rax_jmp_data_t) );    // tramp_t
+
+
+        if (success) {
+            hook_ = hook_type::unhooked;
+            return true;
+        }
+
+        return false;
+    }
+
+    __forceinline
+    void* trampoline() const {
+        void* gateway =  vpr::deviate::trampoline( target_func_,
+                                                   detour_func_,
+                                                   nullptr,
+                                                   2 * sizeof(rax_jmp_data_t) );
+
+        if (gateway) {
+            hook_ = hook_type::tramp_t;
+        }
+        
+        return gateway;
+    }
+
+    __forceinline
+    void* trampoline( auto&&       original_bytes = nullptr,
+                      const size_t original_bytes_size = _rel_jmp_size_ ) const
+    {
+        void* gateway = vpr::deviate::trampoline( target_func_,
+                                                  detour_func_,
+                                                  original_bytes,
+                                                  original_bytes_size );
+
+        if (gateway) {
+            hook_ = hook_type::tramp_t;
+        }
+        
+        return gateway;
+    }
+
+private:
+    typedef struct {
+        unsigned char bytes[64];
+    } original_data, *original_data_ptr;
+
+    uintptr_t           target_func_;
+    uintptr_t           detour_func_;
+    const original_data original_data_;
+    mutable hook_type   hook_;
+    void*               gateway_;
+    std::size_t         size_;
+}; // class interceptor
+
+} // namespace memory
+} // namespace vpr
+#endif  // defined(__cplusplus)
 
 
 #endif  // VPR_DEVIATE_HEADER
