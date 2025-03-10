@@ -3,9 +3,9 @@
  * Created:         March 28th, 2024
  *
  * Updated by:      VPR (0xvpr)
- * Updated:         April 10th, 2024
+ * Updated:         March 9th, 2025
  *
- * Description:     C99/C++20 Header only library for memory management in Windows.
+ * Description:     C99/C++17 (and later) header-only library for function hooking in Windows.
  *
  * License:         MIT (c) VPR 2024
 **/
@@ -14,6 +14,13 @@
 #ifndef    VPR_DEVIATE_HEADER
 #define    VPR_DEVIATE_HEADER
 
+
+#if defined(_MSC_VER_)
+#error "MSVC detected. Only MinGW is supported at this time."
+#endif
+#if defined(__cplusplus)
+#error "C++ detected. Use deviate.hpp instead."
+#endif
 
 
 #ifndef    VC_EXTRA_LEAN
