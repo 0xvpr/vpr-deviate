@@ -3,7 +3,7 @@
  * Created:         March 28th, 2024
  *
  * Updated by:      VPR (0xvpr)
- * Updated:         March 9th, 2025
+ * Updated:         March 10th, 2025
  *
  * Description:     C++17 (and later) header-only library for function hooking in Windows.
  *
@@ -11,30 +11,30 @@
 **/
 
 
-#ifndef    VPR_DEVIATE_HEADER
-#define    VPR_DEVIATE_HEADER
+#ifndef   VPR_DEVIATE_HEADER
+#define   VPR_DEVIATE_HEADER
 
 
-#if defined(_MSC_VER_)
-#error "MSVC detected. Only MinGW is supported at this time."
-#endif
+#if       defined(_MSC_VER_)
+#error    "MSVC detected. Only MinGW is supported at this time."
+#endif // defined(_MSC_VER_)
 
 
-#ifndef    VC_EXTRA_LEAN
-#define    VC_EXTRA_LEAN
-#endif  // VC_EXTRA_LEAN
-#include   <windows.h>
+#ifndef   VC_EXTRA_LEAN
+#define   VC_EXTRA_LEAN
+#endif // VC_EXTRA_LEAN
+#include  <windows.h>
 
-#include   <cstdint>
+#include  <cstdint>
 
-#include   <memory>
-#include   <type_traits>
+#include  <type_traits>
+#include  <memory>
 
 
-constexpr uint8_t   _rel_jmp_      = (uint8_t)0xE9;
-constexpr uint32_t  _rel_jmp_size_ = ((sizeof(uint32_t)+1));
-constexpr uint16_t  _mov_rax_      = (((uint16_t)(0x1234)) & 0xFF) == 0x34 ? 0xB848 : 0x48B8;
-constexpr uint16_t  _jmp_rax_      = (((uint16_t)(0x1234)) & 0xFF) == 0x34 ? 0xE0FF : 0xFFE0;
+constexpr const uint8_t   _rel_jmp_      = (uint8_t)0xE9;
+constexpr const uint32_t  _rel_jmp_size_ = ((sizeof(uint32_t)+sizeof(_rel_jmp_)));
+constexpr const uint16_t  _mov_rax_      = (((uint16_t)(0x1234)) & 0xFF) == 0x34 ? 0xB848 : 0x48B8;
+constexpr const uint16_t  _jmp_rax_      = (((uint16_t)(0x1234)) & 0xFF) == 0x34 ? 0xE0FF : 0xFFE0;
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -556,4 +556,4 @@ private:
 } // namespace vpr
 
 
-#endif  // VPR_DEVIATE_HEADER
+#endif // VPR_DEVIATE_HEADER
