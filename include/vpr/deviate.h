@@ -91,12 +91,12 @@ void set_rel_jmp_data(rel_jmp_data_ptr rel_jmp_data, int32_t address) {
     rel_jmp_data->address = address;
 }
 
-NTSTATUS __declspec(naked) fNtAllocateVirtualMemory( HANDLE    process_handle, 
-                                                     PVOID*    base_address,   
-                                                     ULONG_PTR zero_bits,       
-                                                     PSIZE_T   size_ptr,        
-                                                     ULONG     alloc,
-                                                     ULONG     protect )
+NTSTATUS __declspec(naked) fNtAllocateVirtualMemory( /* HANDLE    process_handle, */ 
+                                                     /* PVOID*    base_address,   */ 
+                                                     /* ULONG_PTR zero_bits,      */  
+                                                     /* PSIZE_T   size_ptr,       */  
+                                                     /* ULONG     alloc,          */
+                                                     /* ULONG     protect         */ )
 {                                                                                  
     __asm__ __volatile__(                                                          
         ".byte 0x49, 0x89, 0xCA\n\t"              /* mov r10, rcx  */              
@@ -106,11 +106,11 @@ NTSTATUS __declspec(naked) fNtAllocateVirtualMemory( HANDLE    process_handle,
     );                                                                             
 }                                                                                  
 
-NTSTATUS __declspec(naked) fNtFreeVirtualMemory( HANDLE  process_handle,     
-                                                 PVOID*  base_address,       
-                                                 PSIZE_T size_ptr,           
-                                                 DWORD   protect,            
-                                                 PDWORD  old_protect     )   
+NTSTATUS __declspec(naked) fNtFreeVirtualMemory( /* HANDLE  process_handle, */     
+                                                 /* PVOID*  base_address,   */     
+                                                 /* PSIZE_T size_ptr,       */     
+                                                 /* DWORD   protect,        */     
+                                                 /* PDWORD  old_protect     */ )   
 {                                                                                  
     __asm__ __volatile__(                                                          
         ".byte 0x49, 0x89, 0xCA\n\t"              /* mov r10, rcx  */              
@@ -120,11 +120,11 @@ NTSTATUS __declspec(naked) fNtFreeVirtualMemory( HANDLE  process_handle,
     );                                                                             
 }                                                                                  
 
-NTSTATUS __declspec(naked) fNtProtectVirtualMemory( HANDLE  process_handle, 
-                                                    PVOID*  base_address,    
-                                                    PSIZE_T size_ptr,        
-                                                    DWORD   protect,         
-                                                    PDWORD  old_protect     )
+NTSTATUS __declspec(naked) fNtProtectVirtualMemory( /* HANDLE  process_handle, */ 
+                                                    /* PVOID*  base_address,   */  
+                                                    /* PSIZE_T size_ptr,       */  
+                                                    /* DWORD   protect,        */  
+                                                    /* PDWORD  old_protect     */ )
 {                                                                                  
     __asm__ __volatile__(                                                          
         ".byte 0x49, 0x89, 0xCA\n\t"              /* mov r10, rcx  */              
@@ -302,3 +302,4 @@ void* vpr_deviate_trampoline( void*       target_func,
 
 
 #endif  // VPR_DEVIATE_HEADER
+
