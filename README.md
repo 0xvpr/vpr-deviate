@@ -13,6 +13,50 @@
 </p>
 A Function hooking/detouring header-only library for Windows (MinGW)
 
+### Example Usage
+C++
+```cpp
+#include <vpr/deviate.hpp>
+#include <stdio.h>
+
+void target(int x) {
+    fprintf(stdout, "%d\n", x);
+}
+
+int main() {
+    unsigned char original_bytes[_rel_jmp_size_];
+
+    target(5); // 5 - original
+    vpr::deviate::detour( target,
+                          [](int x) { return x*x; },
+                          original_bytes,
+                          sizeof(original_bytes) );
+    target(5); // 25 - detoured
+```
+C
+```c
+#include <vpr/deviate.h>
+#include <stdio.h>
+
+void target(int x) {
+    fprintf(stdout, "%d\n", x);
+}
+
+void func(int x) {
+    fprintf(stdout, "%d\n", x*x);
+}
+
+int main() {
+    target(5); // 5 - original
+    vpr_deviate_detour((void *)target, (void *)func, nullptr, 0);
+    target(5); // 25 - detoured
+
+    return 0;
+}
+```
+
+### Compilation
+Use GCC or Clang. MSVC won't accept the inline assembly for x64.
 ## Integration Using CMake                                     
 ### System-wide installation                                   
 ```bash                                                        
@@ -38,28 +82,3 @@ FetchContent_MakeAvailable(vpr-deviate)
 add_executable(app main.cpp)
 target_link_libraries(app PRIVATE vpr-deviate::deviate)
 ```
-
-### Example Usage
-```cpp
-#include <vpr/deviate.h>
-#include <stdio.h>
-
-void target(int x) {
-    fprintf(stdout, "%d\n", x);
-}
-
-void func(int x) {
-    fprintf(stdout, "%d\n", x*x);
-}
-
-int main() {
-    target(5); // 5
-    vpr_deviate_detour((void *)target, (void *)func, nullptr, 0);
-    target(5); // 25
-
-    return 0;
-}
-```
-
-### Compilation
-Use GCC or Clang. MSVC won't accept the inline assembly for x64.
