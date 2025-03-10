@@ -28,32 +28,14 @@
 #endif  // VC_EXTRA_LEAN
 #include   <windows.h>
 
-
-
-#if        !defined(__cplusplus)
 #include   <stdbool.h>
 #include   <stdint.h>
 
-#else   // defined(__cplusplus)
-#include   <cstdint>
-#endif  // defined(__cplusplus)
 
-
-
-#if        !defined(__cplusplus)
 #define             _rel_jmp_      ( ((uint8_t)0xE9) )
 #define             _rel_jmp_size_ ( ((sizeof(uint32_t)+1)) )
 #define             _mov_rax_      ( (((uint16_t)(0x1234)) & 0xFF) == 0x34 ? 0xB848 : 0x48B8 )
 #define             _jmp_rax_      ( (((uint16_t)(0x1234)) & 0xFF) == 0x34 ? 0xE0FF : 0xFFE0 )
-/*#define           _jmp_rax_size_ ( (sizeof(uint16_t)) )*/
-#else   // defined(__cplusplus)
-constexpr uint8_t   _rel_jmp_      = (uint8_t)0xE9;
-constexpr uint32_t  _rel_jmp_size_ = ((sizeof(uint32_t)+1));
-constexpr uint16_t  _mov_rax_      = (((uint16_t)(0x1234)) & 0xFF) == 0x34 ? 0xB848 : 0x48B8;
-constexpr uint16_t  _jmp_rax_      = (((uint16_t)(0x1234)) & 0xFF) == 0x34 ? 0xE0FF : 0xFFE0;
-/*constexpr size_t  _jmp_rax_size_ = (sizeof(uint16_t));*/
-#endif  // defined(__cplusplus)
-
 
 
 ////////////////////////////////////////////////////////////////////////////////
