@@ -13,6 +13,11 @@
 </p>
 A Function hooking/detouring header-only library for Windows (MinGW)
 
+## Table of Contents
+- [Example Usage](#example-usage)
+- [Integration](#integration)
+- [Compilation](#compilation)
+
 ### Example Usage
 C++
 ```cpp
@@ -55,10 +60,8 @@ int main() {
 }
 ```
 
-### Compilation
-Use GCC or Clang. MSVC won't accept the inline assembly for x64.
-## Integration Using CMake                                     
-### System-wide installation                                   
+## Integration
+### System-wide installation using CMake
 ```bash                                                        
 git clone https://github.com/0xvpr/vpr-deviate.git         
 cd vpr-deviate                                             
@@ -82,3 +85,6 @@ FetchContent_MakeAvailable(vpr-deviate)
 add_executable(app main.cpp)
 target_link_libraries(app PRIVATE vpr-deviate::deviate)
 ```
+
+### Compilation
+Use GCC or Clang. MSVC won't accept the inline assembly for x64 (will for x86 but it's not supported by the library).
